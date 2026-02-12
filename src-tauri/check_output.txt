@@ -1,0 +1,70 @@
+    Checking tauri-appapex-security-auditor v0.1.0 (C:\dev\apexapi\src-tauri)
+warning: unused imports: `Arc` and `Mutex`
+ --> src\lib.rs:2:17
+  |
+2 | use std::sync::{Arc, Mutex};
+  |                 ^^^  ^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `ScanResult`
+  --> src\lib.rs:10:25
+   |
+10 | use scanner::{scan_url, ScanResult};
+   |                         ^^^^^^^^^^
+
+error[E0599]: no method named `emit` found for struct `AppHandle<R>` in the current scope
+   --> src\lib.rs:57:44
+    |
+ 57 |                         let _ = app_handle.emit("scan-update", asset.id);
+    |                                            ^^^^
+    |
+   ::: C:\Users\mvsto\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.2\src\lib.rs:952:6
+    |
+952 |   fn emit<S: Serialize + Clone>(&self, event: &str, payload: S) -> Result<()> {
+    |      ---- the method is available for `AppHandle` here
+    |
+    = help: items from traits can only be used if the trait is in scope
+help: there is a method `exit` with a similar name, but with different arguments
+   --> C:\Users\mvsto\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.2\src\app.rs:532:3
+    |
+532 |   pub fn exit(&self, exit_code: i32) {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `Emitter` which provides `emit` is implemented but not in scope; perhaps you want to import it
+    |
+  1 + use tauri::Emitter;
+    |
+
+error[E0599]: no method named `emit` found for struct `AppHandle<R>` in the current scope
+   --> src\lib.rs:98:32
+    |
+ 98 |             let _ = app_handle.emit("scan-update", id);
+    |                                ^^^^
+    |
+   ::: C:\Users\mvsto\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.2\src\lib.rs:952:6
+    |
+952 |   fn emit<S: Serialize + Clone>(&self, event: &str, payload: S) -> Result<()> {
+    |      ---- the method is available for `AppHandle` here
+    |
+    = help: items from traits can only be used if the trait is in scope
+help: there is a method `exit` with a similar name, but with different arguments
+   --> C:\Users\mvsto\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.2\src\app.rs:532:3
+    |
+532 |   pub fn exit(&self, exit_code: i32) {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `Emitter` which provides `emit` is implemented but not in scope; perhaps you want to import it
+    |
+  1 + use tauri::Emitter;
+    |
+
+warning: unused variable: `status_text`
+  --> src\scanner.rs:30:9
+   |
+30 |     let status_text = status_code.to_string();
+   |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_status_text`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `tauri-appapex-security-auditor` (lib) generated 3 warnings
+error: could not compile `tauri-appapex-security-auditor` (lib) due to 2 previous errors; 3 warnings emitted

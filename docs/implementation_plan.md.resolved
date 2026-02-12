@@ -1,0 +1,57 @@
+# API Security & Intelligence Enhancement Plan
+
+**Goal**: Elevate ApexAPI's detection capabilities by implementing advanced security checks and "Shadow API" discovery.
+
+## User Review Required
+
+> [!IMPORTANT]
+> This plan introduces extensive new regex patterns and parsing logic. Performance impact on large scans should be monitored.
+
+## Proposed Changes
+
+### 1. Shadow API Detection (Inventory Management)
+**Goal**: Identify undocumented endpoints by comparing live traffic/assets against an imported OpenAPI specification.
+- **[NEW] `openapi_parser.rs`**: Create a module using `openapi-rs` or `serde_json` to parse Swagger/OpenAPI v3 specs.
+- **[MODIFY] [App.tsx](file:///c:/dev/apexapi/src/App.tsx)**: Add an "Import OpenAPI Spec" drag-and-drop zone using the existing Import Modal.
+- **[MODIFY] [lib.rs](file:///c:/dev/apexapi/src-tauri/src/lib.rs)**: Add `parse_openapi` command to return a list of known paths/methods.
+- **[MODIFY] [db.rs](file:///c:/dev/apexapi/src-tauri/src/db.rs)**: Add `is_documented` boolean to Assets table. Assets *not* in the spec are flagged as "Shadow API" (Risk: Medium).
+
+### 2. Sensitive Data 2.0 (Secrets & PII)
+**Goal**: "Kang" industry-standard regex patterns (Gitleaks/TruffleHog) for robust secret detection.
+- **[MODIFY] [detectors.rs](file:///c:/dev/apexapi/src-tauri/src/detectors.rs)**: 
+    - Replace basic `api_key` checks with a curated list of ~50+ high-fidelity regex signatures (AWS, Stripe, Slack, Google, Private Keys).
+    - Add specific PII patterns: Passport Numbers, Driver's Licenses, SSN (enhanced), IBAN.
+    - Implement `Entropy` check for unknown high-entropy strings (e.g., base64 blobs).
+
+### 3. Security Header Analysis
+**Goal**: Detect missing or insecure HTTP headers (OWASP API8: Security Misconfiguration).
+- **[MODIFY] [detectors.rs](file:///c:/dev/apexapi/src-tauri/src/detectors.rs)**: Add `analyze_headers` function.
+    - Check for missing `Strict-Transport-Security` (HSTS).
+    - Check for missing/weak `Content-Security-Policy`.
+    - Check for missing `X-Content-Type-Options: nosniff`.
+    - Check for missing `X-Frame-Options` or `Content-Security-Policy: frame-ancestors`.
+
+### 4. BOLA/IDOR Heuristics
+**Goal**: Detect "Broken Object Level Authorization" potential without authenticated active scanning.
+- **[MODIFY] [detectors.rs](file:///c:/dev/apexapi/src-tauri/src/detectors.rs)**:
+    - **Sequential IDs**: Detect integer IDs in URLs (e.g., `/users/1042` vs `/users/1043`) as "Predictable Resource ID".
+    - **ID Pattern Match**: Flag if `user_id` or `account_id` in response body matches a pattern but leaks distinct IDs across a list (indicating broad access).
+
+### 5. Verbose Error Intelligence
+**Goal**: Fingerprint specific tech stacks via error pages (OWASP API8).
+- **[MODIFY] [detectors.rs](file:///c:/dev/apexapi/src-tauri/src/detectors.rs)**: Add specific signatures for:
+    - Laravel (`Whoops!`, `glare`).
+    - Django (`DEBUG = True`, `Django Version`).
+    - Spring Boot (`Whitelabel Error Page`).
+    - Flask/Werkzeug debugger pin leaks.
+    - Express.js default stack traces.
+
+## Verification Plan
+
+### Automated Tests
+- Create unit tests in [detectors.rs](file:///c:/dev/apexapi/src-tauri/src/detectors.rs) with sample payloads for every new signature (AWS keys, Shadow API mismatch scenarios, etc.).
+
+### Manual Verification
+- **Shadow API**: Import "Petstore" Swagger spec, then scan a "Petstore" instance with an added/undocumented `/admin` endpoint. Verify `/admin` is flagged.
+- **Secrets**: Paste a dummy AWS key into a mock server response and verify detection.
+- **Headers**: Scan `example.com` (or a local vulnerable server) and verify "Missing HSTS" badge.
