@@ -836,7 +836,7 @@ export const Inspector: React.FC<InspectorProps> = ({
 
             {/* AI Analysis Tab */}
             {activeInspectorTab === 'AIAnalysis' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, minHeight: 0 }}>
                     <div style={{ 
                         background: 'rgba(59, 130, 246, 0.1)', 
                         border: '1px solid rgba(59, 130, 246, 0.2)', 
@@ -949,7 +949,7 @@ export const Inspector: React.FC<InspectorProps> = ({
             )}
             {/* History Tab */}
             {activeInspectorTab === 'History' && (
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '16px' }}>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px', borderLeft: '3px solid var(--accent-color)', paddingLeft: '8px' }}>
                         Endpoint Audit History: Tracked changes in risk score and findings over time.
                     </div>

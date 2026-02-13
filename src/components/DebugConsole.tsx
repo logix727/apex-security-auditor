@@ -259,7 +259,7 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
 
       {/* Console Body */}
       {isOpen && (
-        <div className="debug-console-body">
+        <div className="debug-console-body" style={{ overflow: 'hidden' }}>
           <div className="debug-console-logs" ref={logContainerRef}>
             {filteredLogs.length === 0 ? (
               <div className="debug-console-empty">

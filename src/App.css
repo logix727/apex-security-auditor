@@ -135,7 +135,7 @@ body {
 .main-content {
   grid-area: main;
   padding: 24px;
-  overflow: hidden; /* Prevent double scrollbars */
+  overflow: hidden;
   background-color: var(--bg-primary);
   display: flex;
   flex-direction: column;
@@ -244,8 +244,10 @@ textarea {
 
 /* Asset Table Container */
 .table-container {
-  flex: 1; /* Match flex-grow: 1 in App.tsx */
-  overflow-y: auto;
+  display: flex;           /* Enable flex for children */
+  flex-direction: column;  /* Stack children vertically */
+  flex: 1;
+  overflow: hidden;        /* Let inner div handle scrolling */
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background-color: var(--bg-secondary);

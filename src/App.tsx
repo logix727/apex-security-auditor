@@ -255,8 +255,15 @@ function App() {
   const stopResizing = () => { isResizing.current = false; document.body.style.cursor = 'default'; };
   const resize = (e: MouseEvent) => {
     if (!isResizing.current) return;
+    const sidebarWidth = 240;
+    const handleWidth = 4;
+    const minInspectorWidth = 300;
+    const minMainWidth = 100; // Minimum width for main content area
+    const maxInspectorWidth = window.innerWidth - sidebarWidth - handleWidth - minMainWidth;
     const newWidth = window.innerWidth - e.clientX;
-    if (newWidth >= 300 && newWidth <= 800) setInspectorWidth(newWidth);
+    if (newWidth >= minInspectorWidth && newWidth <= Math.min(800, maxInspectorWidth)) {
+      setInspectorWidth(newWidth);
+    }
   };
 
   useEffect(() => {
@@ -911,7 +918,9 @@ function App() {
   return (
     <div 
         className="app-container" 
-        style={{ gridTemplateColumns: showInspector ? `240px 1fr 4px ${inspectorWidth}px` : '240px 1fr 0px 0px' }}
+        style={{ gridTemplateColumns: showInspector 
+          ? `240px calc(100% - 240px - 4px - ${inspectorWidth}px) 4px ${inspectorWidth}px` 
+          : '240px 1fr 0px 0px' }}
     >
        {/* Header */}
       <header className="header" style={{justifyContent: 'space-between'}}>
@@ -972,9 +981,9 @@ function App() {
       {/* Main Content */}
       <main className="main-content">
         {activeView === 'assets' && (
-             <div style={{ display: 'flex', height: '100%', gap: '20px' }}>
+             <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: '20px' }}>
                  {/* Internal Asset Sidebar */}
-                 <div style={{ width: '220px', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
+                 <div style={{ width: '220px', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
                     <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
                         <button 
                             onClick={() => { setAssetSidebarView('tree'); setActiveFolderId(null); setSelectedTreePath(null); }}
@@ -1283,7 +1292,7 @@ function App() {
         )}
 
         {activeView === 'workbench' && (
-            <div style={{height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0}}>
+            <div style={{flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0}}>
                 <div style={{padding: '10px 0', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0}}>
                     <h3 style={{margin: 0}}>Scanning Workbench ({workbenchIds.size})</h3>
                     <div style={{display: 'flex', gap: '8px'}}>
@@ -1306,7 +1315,7 @@ function App() {
                         <button onClick={() => setWorkbenchIds(new Set())} className="menu-item" style={{ fontSize: '11px', color: 'var(--status-critical)' }}>Clear Session</button>
                     </div>
                 </div>
-                <div className="table-container" style={{flex: 1, marginTop: '20px'}}>
+                <div className="table-container" style={{flex: 1, marginTop: '20px', minHeight: 0}}>
                     {workbenchIds.size === 0 ? (
                         <div style={{textAlign: 'center', marginTop: '100px', color: 'var(--text-secondary)'}}>
                              <FileCode size={48} style={{opacity: 0.2, marginBottom: '16px'}} />
