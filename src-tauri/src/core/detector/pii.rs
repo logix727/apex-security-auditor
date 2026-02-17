@@ -221,3 +221,51 @@ pub fn detect_pii(content: &str) -> Vec<SecretFinding> {
 
     findings
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_email() {
+        let content = "Contact us at support@example.com for help.";
+        let findings = detect_pii(content);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].secret_type, "Email Address");
+        assert_eq!(findings[0].matched_value, "su***@example.com");
+    }
+
+    #[test]
+    fn test_detect_ssn() {
+        let content = "My SSN is 123-45-6789";
+        let findings = detect_pii(content);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].secret_type, "US SSN");
+    }
+
+    #[test]
+    fn test_detect_credit_card() {
+        // Using a valid test card number (Luhn compliant)
+        let content = "Pay with 4242 4242 4242 4242";
+        let findings = detect_pii(content);
+        assert!(!findings.is_empty());
+        assert!(findings
+            .iter()
+            .any(|f| f.secret_type.contains("Credit Card")));
+    }
+
+    #[test]
+    fn test_context_awareness_ssn() {
+        let no_context = "Those numbers are 123456789";
+        assert!(detect_pii(no_context).is_empty());
+
+        let with_context = "The user ssn is 123456789";
+        assert!(!detect_pii(with_context).is_empty());
+    }
+
+    #[test]
+    fn test_luhn_check() {
+        assert!(luhn_check("4242424242424242"));
+        assert!(!luhn_check("4242424242424243"));
+    }
+}

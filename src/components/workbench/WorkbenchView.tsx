@@ -17,6 +17,7 @@ interface WorkbenchViewProps {
     onPromoteToAssetManager: () => void;
     onExportMarkdown: () => void;
     onExportCsv: () => void;
+    onExportHtml: () => void;
     onSelectionChange: (ids: Set<number>) => void;
     smartFilter: 'All' | 'Critical' | 'PII' | 'Secrets' | 'Shadow';
     setSmartFilter: (filter: 'All' | 'Critical' | 'PII' | 'Secrets' | 'Shadow') => void;
@@ -34,6 +35,9 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     workbenchSort,
     workbenchFilter,
     onPromoteToAssetManager,
+    onExportMarkdown,
+    onExportCsv,
+    onExportHtml,
     onSelectionChange,
     smartFilter,
     setSmartFilter,
@@ -180,6 +184,18 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                         <Target size={14} /> Promote to Manager
                     </button>
                     
+                    <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid var(--border-color)', paddingLeft: '8px' }}>
+                        <button title="Export CSV" onClick={onExportCsv} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                            <FileCode size={14} />
+                        </button>
+                        <button title="Export Markdown" onClick={onExportMarkdown} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                            <FileCode size={14} />
+                        </button>
+                        <button title="Export HTML" onClick={onExportHtml} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                            <FileCode size={14} />
+                        </button>
+                    </div>
+
                     <button 
                         onClick={() => setWorkbenchIds(new Set())}
                         style={{ padding: '6px 12px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer' }}

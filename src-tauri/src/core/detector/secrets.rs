@@ -159,3 +159,49 @@ pub fn detect_secrets(content: &str) -> Vec<SecretFinding> {
     findings.extend(detect_high_entropy_secrets(content));
     findings
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::detector::FindingSeverity;
+
+    #[test]
+    fn test_detect_aws_key() {
+        let content = "The key is AKIA1234567890123456 do not share!";
+        let findings = detect_secrets(content);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].secret_type, "AWS Access Key ID");
+        assert_eq!(findings[0].severity, FindingSeverity::Critical);
+    }
+
+    #[test]
+    fn test_detect_github_token() {
+        let content = "export GITHUB_TOKEN=ghp_aB1cD2eF3gH4iJ5kL6mN7oP8qR9sT0uV1wX2";
+        let findings = detect_secrets(content);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].secret_type, "GitHub Personal Access Token");
+        assert_eq!(findings[0].severity, FindingSeverity::Critical);
+    }
+
+    #[test]
+    fn test_detect_bearer_token() {
+        let content = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+        let findings = detect_secrets(content);
+        assert!(findings.iter().any(|f| f.secret_type == "Bearer Token"));
+    }
+
+    #[test]
+    fn test_high_entropy_detection() {
+        // A random high entropy string
+        let content = "secret_value = 'SGVsbG8gV29ybGQhIFRoaXMgaXMgYSByYW5kb20gc3RyaW5nIHdpdGggaGlnaCBlbnRyb3B5IQ=='";
+        let findings = detect_high_entropy_secrets(content);
+        assert!(!findings.is_empty());
+    }
+
+    #[test]
+    fn test_no_secrets() {
+        let content = "Just some normal text without any keys or secrets.";
+        let findings = detect_secrets(content);
+        assert!(findings.is_empty());
+    }
+}

@@ -108,6 +108,7 @@ pub struct ScanHistoryEntry {
 pub struct SqliteDatabase {
     pub(crate) conn: Arc<Mutex<Connection>>,
     pub client: reqwest::Client,
+    pub rate_limiter: crate::core::rate_limiter::SharedRateLimiter,
 }
 
 impl Clone for SqliteDatabase {
@@ -115,6 +116,7 @@ impl Clone for SqliteDatabase {
         Self {
             conn: self.conn.clone(),
             client: self.client.clone(),
+            rate_limiter: self.rate_limiter.clone(),
         }
     }
 }
@@ -136,9 +138,15 @@ impl SqliteDatabase {
             .build()
             .unwrap_or_default();
 
+        let rate_limiter = Arc::new(crate::core::rate_limiter::RateLimiter::new(100)); // Default 100ms
+
         drop(conn_lock);
 
-        Ok(SqliteDatabase { conn, client })
+        Ok(SqliteDatabase {
+            conn,
+            client,
+            rate_limiter,
+        })
     }
 
     fn init_tables(conn: &Connection) -> Result<()> {
@@ -277,6 +285,7 @@ impl SqliteDatabase {
                 request_headers TEXT,
                 response_headers TEXT,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                captures TEXT DEFAULT '[]',
                 FOREIGN KEY(sequence_id) REFERENCES sequences(id) ON DELETE CASCADE
             )",
             [],
@@ -321,6 +330,7 @@ impl SqliteDatabase {
             ("assets", "is_documented", "BOOLEAN NOT NULL DEFAULT 1"),
             ("assets", "source", "TEXT DEFAULT 'User'"),
             ("assets", "recursive", "BOOLEAN DEFAULT 0"),
+            ("sequence_steps", "captures", "TEXT DEFAULT '[]'"),
         ];
 
         for (table, name, def) in columns {

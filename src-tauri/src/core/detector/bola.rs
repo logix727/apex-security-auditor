@@ -66,3 +66,45 @@ pub fn detect_bola_patterns(url: &str, body: &str) -> Vec<BolaFinding> {
 
     findings
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_predictable_url_id() {
+        let url = "https://api.example.com/api/v1/users/123/profile";
+        let findings = detect_bola_patterns(url, "");
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].finding_type, "Predictable Resource ID");
+        assert_eq!(findings[0].resource_pattern, "123");
+        assert_eq!(findings[0].severity, FindingSeverity::High);
+    }
+
+    #[test]
+    fn test_detect_predictable_body_id() {
+        let body = r#"{"status": "success", "data": {"id": 456, "name": "Test User"}}"#;
+        let findings = detect_bola_patterns("https://api.example.com/user", body);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].finding_type, "Resource ID in Body");
+        assert_eq!(findings[0].resource_pattern, "456");
+        assert_eq!(findings[0].severity, FindingSeverity::Medium);
+    }
+
+    #[test]
+    fn test_detect_uuid_id_is_safe() {
+        let url =
+            "https://api.example.com/api/v1/users/550e8400-e29b-41d4-a716-446655440000/content";
+        let findings = detect_bola_patterns(url, "");
+        // UUIDs should not be flagged as predictable numeric IDs
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn test_detect_long_numeric_id_is_safe() {
+        let url = "https://api.example.com/orders/123456789012345";
+        let findings = detect_bola_patterns(url, "");
+        // Long numeric IDs are harder to guess/enumerate
+        assert!(findings.is_empty());
+    }
+}

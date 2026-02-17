@@ -58,9 +58,12 @@ impl Badge {
     }
 }
 
-// ============================================
-// SEQUENCE ANALYSIS STRUCTURES
-// ============================================
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VariableCapture {
+    pub name: String,
+    pub source: String, // e.g. "json:body.id" or "header:Authorization"
+    pub regex: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SequenceStep {
@@ -75,6 +78,8 @@ pub struct SequenceStep {
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
     pub timestamp: String,
+    #[serde(default)]
+    pub captures: Vec<VariableCapture>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

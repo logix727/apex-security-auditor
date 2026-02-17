@@ -637,6 +637,139 @@ pub async fn analyze_sequence(
     })
 }
 
+fn build_exploit_narrative_prompt(sequence: &crate::data::RequestSequence) -> String {
+    let steps_text = sequence
+        .steps
+        .iter()
+        .enumerate()
+        .map(|(i, step)| {
+            format!(
+                "STEP {}: {} {}\nResponse Snippet: {:?}\n",
+                i + 1,
+                step.method,
+                step.url,
+                step.response_body
+                    .as_ref()
+                    .map(|b| b.chars().take(200).collect::<String>())
+                    .unwrap_or_default()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+
+    format!(
+        r#"You are a RED TEAM OPERATOR.
+Construct a technical exploit narrative for this attack sequence.
+Focus on explaining exactly how the security controls were bypassed or how the logic flaw was chain.
+
+FLOW: {}
+
+SEQUENCE:
+{}
+
+OUTPUT FORMAT:
+# 🚩 EXPLOIT NARRATIVE
+## 🎯 OBJECTIVE
+[What the attacker is trying to achieve]
+
+## 🛠️ ATTACK VECTOR
+[Specific vulnerability type, e.g., BOLA to Account Takeover]
+
+## ⛓️ STEP-BY-STEP FLOW
+1. [Explanation of Step 1]
+2. [Explanation of Step 2 and how it uses data from Step 1]
+...
+
+## 💥 IMPACT
+[Business impact of this exploit]
+"#,
+        sequence.flow_name.as_deref().unwrap_or("Unnamed Flow"),
+        steps_text
+    )
+}
+
+#[tauri::command]
+pub async fn generate_exploit_narrative(
+    sequence: crate::data::RequestSequence,
+) -> Result<SequenceAnalysisOutput, String> {
+    let config = LlmConfig::load();
+    let provider_display = match config.provider_type {
+        ProviderType::OpenAI => "OpenAI",
+        ProviderType::Anthropic => "Anthropic",
+        ProviderType::Local => "Local",
+    };
+
+    if !config.is_configured() {
+        return Err("LLM not configured.".to_string());
+    }
+
+    let prompt = build_exploit_narrative_prompt(&sequence);
+    let analysis = call_llm_api(&config, &prompt)
+        .await
+        .map_err(|e| format!("{}: {}", provider_display, e))?;
+
+    Ok(SequenceAnalysisOutput {
+        analysis,
+        provider: provider_display.to_string(),
+    })
+}
+
+fn build_remediation_diff_prompt(sequence: &crate::data::RequestSequence) -> String {
+    format!(
+        r#"You are a SECURE CODING EXPERT.
+Provide a technical remediation guide and code-level diff for the vulnerabilities detected in this sequence.
+
+FLOW: {}
+
+INSTRUCTIONS:
+1. Explain the root cause.
+2. Provide a generic code-level fix (use common languages like Python/Go/Node if specific language is unknown).
+3. Suggest architectural improvements.
+
+OUTPUT FORMAT:
+# 🛠️ REMEDIATION GUIDE
+## 🔍 ROOT CAUSE
+[Description]
+
+## 💻 SUGGESTED FIX
+```diff
+- [Vulnerable Code]
++ [Secure Code]
+```
+
+## 🛡️ DEFENSIVE STRATEGY
+[Architectural advice]
+"#,
+        sequence.flow_name.as_deref().unwrap_or("Unnamed Flow")
+    )
+}
+
+#[tauri::command]
+pub async fn generate_remediation_diff(
+    sequence: crate::data::RequestSequence,
+) -> Result<SequenceAnalysisOutput, String> {
+    let config = LlmConfig::load();
+    let provider_display = match config.provider_type {
+        ProviderType::OpenAI => "OpenAI",
+        ProviderType::Anthropic => "Anthropic",
+        ProviderType::Local => "Local",
+    };
+
+    if !config.is_configured() {
+        return Err("LLM not configured.".to_string());
+    }
+
+    let prompt = build_remediation_diff_prompt(&sequence);
+    let analysis = call_llm_api(&config, &prompt)
+        .await
+        .map_err(|e| format!("{}: {}", provider_display, e))?;
+
+    Ok(SequenceAnalysisOutput {
+        analysis,
+        provider: provider_display.to_string(),
+    })
+}
+
 #[tauri::command]
 pub fn get_llm_config() -> LlmConfigPublic {
     let config = LlmConfig::load();

@@ -53,8 +53,9 @@ pub async fn scan_url(
     client: &reqwest::Client,
     url: &str,
     method: &str,
+    rate_limiter: &crate::core::rate_limiter::RateLimiter,
 ) -> crate::scanner::ScanResult {
-    crate::scanner::scan_url(client, url, method).await
+    crate::scanner::scan_url(client, url, method, rate_limiter).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -97,7 +98,8 @@ pub fn run() {
             commands::assets::get_assets,
             commands::assets::get_asset_history,
             commands::export::generate_audit_report,
-            commands::export::export_to_csv_final_v5,
+            commands::export::export_findings_to_csv,
+            commands::export::generate_html_report,
             commands::assets::delete_asset,
             commands::scan::rescan_asset,
             commands::assets::clear_database,
@@ -137,10 +139,16 @@ pub fn run() {
             commands::sequence::add_to_sequence,
             commands::sequence::get_sequence,
             commands::sequence::list_sequences,
+            commands::sequence::execute_sequence_step,
             ai::analyze_sequence,
+            ai::generate_exploit_narrative,
+            ai::generate_remediation_diff,
             commands::proxy::start_proxy_service,
             commands::proxy::stop_proxy_service,
             commands::proxy::get_proxy_status,
+            commands::proxy::set_proxy_intercept,
+            commands::proxy::forward_intercepted_request,
+            commands::proxy::drop_intercepted_request,
             commands::assets::toggle_finding_fp,
             commands::discovery::discover_subdomains,
             commands::discovery::promote_discovered_assets,

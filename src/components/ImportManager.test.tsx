@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { ImportManager, AssetInputSchema } from './ImportManager';
+import { ImportManager } from './ImportManager';
+import { AssetInputSchema } from '../hooks/useImportProcessor';
 
 // Mock Tauri
 vi.mock('@tauri-apps/api/core', () => ({
-    invoke: vi.fn()
+    invoke: vi.fn(() => Promise.resolve([]))
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -73,7 +74,7 @@ describe('ImportManager', () => {
         existingUrls: new Set<string>(['https://existing.com'])
     };
 
-    it('should render incorrectly when closed', () => {
+    it('should not render when closed', () => {
         const { container } = render(<ImportManager {...mockProps} isOpen={false} />);
         expect(container.firstChild).toBeNull();
     });
@@ -81,25 +82,25 @@ describe('ImportManager', () => {
     it('should render title and subtitle when open', () => {
         render(<ImportManager {...mockProps} />);
         expect(screen.getByText('Asset Import Manager')).toBeInTheDocument();
-        expect(screen.getByText(/Enterprise Edition/)).toBeInTheDocument();
+        expect(screen.getByText(/Multi-source parallel processing/)).toBeInTheDocument();
     });
 
     it('should handle text input changes', () => {
         render(<ImportManager {...mockProps} />);
-        const textarea = screen.getByPlaceholderText(/Paste lists of URLs/);
+        const textarea = screen.getByPlaceholderText(/Paste URLs, JSON arrays/);
         fireEvent.change(textarea, { target: { value: 'GET https://test.com' } });
         expect((textarea as HTMLTextAreaElement).value).toBe('GET https://test.com');
     });
 
     it('should show duplicate status for existing URLs', async () => {
         render(<ImportManager {...mockProps} />);
-        const textarea = screen.getByPlaceholderText(/Paste lists of URLs/);
+        const textarea = screen.getByPlaceholderText(/Paste URLs, JSON arrays/);
         
         await act(async () => {
             fireEvent.change(textarea, { target: { value: 'GET https://existing.com' } });
         });
         
-        const parseButton = screen.getByText('Stage Content');
+        const parseButton = screen.getByText('Process Staged Text');
         await act(async () => {
             fireEvent.click(parseButton);
         });
@@ -111,13 +112,13 @@ describe('ImportManager', () => {
 
     it('should clear duplicates when CLEAR DUPES is clicked', async () => {
         render(<ImportManager {...mockProps} />);
-        const textarea = screen.getByPlaceholderText(/Paste lists of URLs/);
+        const textarea = screen.getByPlaceholderText(/Paste URLs, JSON arrays/);
         
         await act(async () => {
             fireEvent.change(textarea, { target: { value: 'https://existing.com' } });
         });
         
-        fireEvent.click(screen.getByText('Stage Content'));
+        fireEvent.click(screen.getByText('Process Staged Text'));
 
         await waitFor(() => {
             expect(screen.getByText('duplicate')).toBeInTheDocument();
@@ -133,7 +134,7 @@ describe('ImportManager', () => {
 
     it('should parse JSON OpenAPI specs from dropped files', async () => {
         render(<ImportManager {...mockProps} />);
-        const dropZone = screen.getByPlaceholderText(/Paste lists of URLs/);
+        const dropZone = screen.getByText(/Drop files or click to upload/);
         
         const openApiSpec = JSON.stringify({
             openapi: '3.0.0',
@@ -164,7 +165,7 @@ describe('ImportManager', () => {
         await waitFor(() => {
             expect(screen.getByText('/users')).toBeInTheDocument();
             expect(screen.getByText('GET')).toBeInTheDocument();
-            expect(screen.getByText('Run Shadow API Discovery')).toBeInTheDocument();
-        });
+            expect(screen.getByText('Analyze Shadow APIs')).toBeInTheDocument();
+        }, { timeout: 3000 });
     });
 });

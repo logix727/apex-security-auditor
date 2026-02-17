@@ -1,4 +1,4 @@
-use crate::db::{traits::DatabaseTrait, SqliteDatabase};
+use crate::db::SqliteDatabase;
 use tauri::State;
 
 #[tauri::command]

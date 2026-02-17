@@ -20,6 +20,11 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
     const authLine = headers.split('\n').find(h => h.toLowerCase().startsWith('authorization:'));
     const authHeader = authLine ? authLine.split(': ')[1] : '';
 
+    const [tamperMode, setTamperMode] = React.useState(false);
+    const [tamperPayload, setTamperPayload] = React.useState('');
+    const [tamperSecret, setTamperSecret] = React.useState('');
+    const [resignedToken, setResignedToken] = React.useState('');
+
     return (
         <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: '0 16px 16px 16px', gap: '20px' }}>
             <section>
@@ -33,27 +38,13 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
                         <div style={{fontSize: '10px', opacity: 0.6}}>{authHeader ? 'Protected by Authorization header system.' : 'This endpoint may be public or missing security controls.'}</div>
                     </div>
                 </div>
-                {authHeader && (
-                    <div style={{marginTop: '12px'}}>
-                        <div style={{fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 'bold'}}>Active Token / Secret</div>
-                        <div style={{fontSize: '10px', fontFamily: 'monospace', wordBreak: 'break-all', opacity: 0.8, background: 'var(--bg-primary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', position: 'relative'}}>
-                            {authHeader}
-                            <button 
-                                onClick={() => navigator.clipboard.writeText(authHeader)}
-                                style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                            >
-                                <Copy size={12} />
-                            </button>
-                        </div>
-                    </div>
-                )}
             </section>
 
             <section>
-                <h4 style={{fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px'}}><Key size={12}/> Discovered Tokens (PII/Secrets)</h4>
+                <h4 style={{fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px'}}><Key size={12}/> Discovered Tokens</h4>
                 {secretsFound.length === 0 ? (
                     <div style={{background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderStyle: 'dashed', borderRadius: '8px', padding: '16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '11px'}}>
-                        No additional tokens discovered in exchange bodies.
+                        No additional tokens discovered.
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -61,28 +52,17 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
                             <div key={i} style={{ padding: '12px', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)', borderLeft: '4px solid var(--status-critical)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                     <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: 'var(--status-critical)' }}>{token.type}</span>
-                                    <button 
-                                        onClick={() => navigator.clipboard.writeText(token.value)}
-                                        style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                                    >
-                                        <Copy size={12} />
-                                    </button>
+                                    <button onClick={() => navigator.clipboard.writeText(token.value)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><Copy size={12} /></button>
                                 </div>
-                                <div style={{ fontSize: '11px', wordBreak: 'break-all', opacity: 0.8, fontFamily: 'monospace', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '4px' }}>
-                                    {token.value}
-                                </div>
+                                <div style={{ fontSize: '11px', wordBreak: 'break-all', opacity: 0.8, fontFamily: 'monospace', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '4px' }}>{token.value}</div>
+                                
                                 {token.type === 'jwt' && !decodedJwt && (
                                     <button 
                                         onClick={async () => {
                                             try {
                                                 const result = await invoke<any>('decode_jwt', { token: token.value });
-                                                const payload = result.payload || {};
-                                                const claimsArray = Object.entries(payload).map(([k, v]) => ({
-                                                    key: k,
-                                                    value: typeof v === 'object' ? JSON.stringify(v) : String(v),
-                                                    is_sensitive: ["admin", "role", "su", "permissions", "scope", "email"].some(s => k.toLowerCase().includes(s))
-                                                }));
-                                                setDecodedJwt(claimsArray);
+                                                setDecodedJwt(result); 
+                                                setTamperPayload(JSON.stringify(result.payload, null, 2));
                                             } catch(e) { alert("Failed to decode JWT."); }
                                         }}
                                         style={{ marginTop: '10px', width: '100%', padding: '6px', background: 'var(--bg-sidebar)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}
@@ -99,19 +79,76 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({
             {decodedJwt && (
                 <section style={{ background: 'var(--bg-primary)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', marginTop: '20px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <h4 style={{fontSize: '11px', color: 'var(--accent-color)', textTransform: 'uppercase', fontWeight: '800'}}>Decoded JWT Claims</h4>
-                        <button onClick={() => setDecodedJwt(null)} style={{ background: 'none', border: 'none', color: 'var(--status-critical)', fontSize: '10px', cursor: 'pointer' }}>Close</button>
+                        <h4 style={{fontSize: '11px', color: 'var(--accent-color)', textTransform: 'uppercase', fontWeight: '800'}}>Decoded JWT</h4>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                             <button onClick={() => setTamperMode(!tamperMode)} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'white', fontSize: '10px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>
+                                {tamperMode ? 'View Claims' : 'Tamper / Re-sign'}
+                             </button>
+                             <button onClick={() => setDecodedJwt(null)} style={{ background: 'none', border: 'none', color: 'var(--status-critical)', fontSize: '10px', cursor: 'pointer' }}>Close</button>
+                        </div>
                     </div>
-                    <table style={{width: '100%', fontSize: '11px', borderCollapse: 'collapse'}}>
-                        <tbody>
-                            {decodedJwt.map((claim: any, idx: number) => (
-                                <tr key={idx} style={{borderBottom: '1px solid rgba(255,255,255,0.05)'}}>
-                                    <td style={{padding: '8px 0', color: claim.is_sensitive ? 'var(--status-critical)' : 'var(--text-secondary)', fontWeight: 'bold', fontSize: '10px'}}>{claim.key}</td>
-                                    <td style={{padding: '8px 0', textAlign: 'right', fontFamily: 'monospace', opacity: 0.9, wordBreak: 'break-all'}}>{claim.value}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+
+                    {!tamperMode ? (
+                        <table style={{width: '100%', fontSize: '11px', borderCollapse: 'collapse'}}>
+                            <tbody>
+                                {Object.entries(decodedJwt.payload || {}).map(([k, v], idx) => (
+                                    <tr key={idx} style={{borderBottom: '1px solid rgba(255,255,255,0.05)'}}>
+                                        <td style={{padding: '8px 0', color: ["admin", "role"].some(s => k.includes(s)) ? 'var(--status-critical)' : 'var(--text-secondary)', fontWeight: 'bold', fontSize: '10px'}}>{k}</td>
+                                        <td style={{padding: '8px 0', textAlign: 'right', fontFamily: 'monospace', opacity: 0.9, wordBreak: 'break-all'}}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div>
+                                <label style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Payload (JSON)</label>
+                                <textarea 
+                                    value={tamperPayload}
+                                    onChange={(e) => setTamperPayload(e.target.value)}
+                                    style={{ width: '100%', height: '120px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', color: 'white', fontFamily: 'monospace', fontSize: '11px', padding: '8px', borderRadius: '4px' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Signing Secret (HMAC)</label>
+                                <input 
+                                    type="text"
+                                    placeholder="Enter secret key to sign..."
+                                    value={tamperSecret}
+                                    onChange={(e) => setTamperSecret(e.target.value)}
+                                    style={{ width: '100%', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', color: 'white', fontSize: '11px', padding: '8px', borderRadius: '4px' }}
+                                />
+                            </div>
+                            <button 
+                                onClick={async () => {
+                                    try {
+                                        const claims = JSON.parse(tamperPayload);
+                                        const token = await invoke<string>('sign_jwt', { 
+                                            header: decodedJwt.header || {}, 
+                                            claims, 
+                                            secret: tamperSecret 
+                                        });
+                                        setResignedToken(token);
+                                    } catch (e) {
+                                        alert("Failed to sign: " + e);
+                                    }
+                                }}
+                                disabled={!tamperSecret}
+                                className="btn btn-primary"
+                                style={{ justifyContent: 'center', opacity: !tamperSecret ? 0.5 : 1 }}
+                            >
+                                <Key size={12} /> Sign & Generate Token
+                            </button>
+
+                            {resignedToken && (
+                                <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                                    <div style={{ fontSize: '10px', color: '#10b981', fontWeight: 'bold', marginBottom: '4px' }}>Resigned Token</div>
+                                    <div style={{ fontSize: '10px', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: '8px' }}>{resignedToken}</div>
+                                    <button onClick={() => navigator.clipboard.writeText(resignedToken)} style={{ background: 'var(--bg-secondary)', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', color: 'white' }}>Copy to Clipboard</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </section>
             )}
         </div>

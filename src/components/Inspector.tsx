@@ -10,7 +10,9 @@ import { SecurityTab } from './inspector/SecurityTab';
 import { DetailsTab } from './inspector/DetailsTab';
 import { AiAnalysisModal } from './inspector/AiAnalysisModal';
 
-export type InspectorTab = 'Summary' | 'Exchange' | 'Security' | 'Details';
+import { ResponseDiff } from './inspector/ResponseDiff';
+
+export type InspectorTab = 'Summary' | 'Exchange' | 'Security' | 'Details' | 'Diff';
 
 interface InspectorProps {
     inspectorAsset: Asset | null;
@@ -206,7 +208,7 @@ export const Inspector: React.FC<InspectorProps> = ({
         if (inspectorAsset && activeInspectorTab === 'Summary') {
             handleAnalyzeAssetSummary();
         }
-        if (inspectorAsset && activeInspectorTab === 'Details') {
+        if (inspectorAsset && (activeInspectorTab === 'Details' || activeInspectorTab === 'Diff')) {
             handleFetchHistory();
         }
     }, [inspectorAsset?.id, activeInspectorTab]);
@@ -405,6 +407,45 @@ export const Inspector: React.FC<InspectorProps> = ({
                     setDiffBaseId={setDiffBaseId}
                     computeDiff={computeDiff}
                 />
+            )}
+
+            {activeInspectorTab === 'Diff' && inspectorAsset && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 16px 16px 16px', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div>
+                            <div style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--text-secondary)', marginBottom: '4px', textTransform: 'uppercase' }}>Compare With</div>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>Historical Scan</div>
+                        </div>
+                        <select 
+                            value={diffBaseId || ''}
+                            onChange={(e) => setDiffBaseId(Number(e.target.value))}
+                            style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', color: 'white', fontSize: '11px', padding: '6px 12px' }}
+                            disabled={historyLoading || history.length === 0}
+                        >
+                            {historyLoading ? <option>Loading...</option> : 
+                             history.length === 0 ? <option>No history</option> :
+                             history.map(h => (
+                                <option key={h.id} value={h.id}>{new Date(h.scanned_at || h.timestamp).toLocaleString()} (Status: {h.status_code})</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div style={{ flex: 1, minHeight: 0 }}>
+                        {(() => {
+                            const baseScan = history.find(h => h.id === diffBaseId);
+                            if (!baseScan && history.length > 0) return <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>Select a scan to compare.</div>;
+                            if (history.length === 0 && !historyLoading) return <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5 }}>No historical scans found to compare against.</div>;
+                            
+                            return (
+                                <ResponseDiff
+                                    original={baseScan?.response_body || ''}
+                                    modified={inspectorAsset.response_body || ''}
+                                    language="json" // TODO: Detect language
+                                />
+                            );
+                        })()}
+                    </div>
+                </div>
             )}
         </div>
 

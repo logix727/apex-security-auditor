@@ -84,3 +84,50 @@ pub fn detect_tech_stack_errors(content: &str) -> Vec<ErrorFinding> {
 
     findings
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_spring_error() {
+        let content = "Whitelabel Error Page: This application has no explicit mapping for /error, so you are seeing this as a fallback.";
+        let findings = detect_tech_stack_errors(content);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].technology, "Spring Boot");
+        assert_eq!(findings[0].severity, FindingSeverity::Medium);
+    }
+
+    #[test]
+    fn test_detect_django_debug() {
+        let content = "<h1>TemplateDoesNotExist</h1><p>You're seeing this error because you have <code>DEBUG = True</code> in your settings file.</p>";
+        let findings = detect_tech_stack_errors(content);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].technology, "Django");
+        assert_eq!(findings[0].severity, FindingSeverity::High);
+    }
+
+    #[test]
+    fn test_detect_sql_error() {
+        let content = "Database error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'LIMIT 0, 10' at line 1";
+        let findings = detect_tech_stack_errors(content);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].technology, "SQL Error");
+        assert_eq!(findings[0].error_type, "MySQL Disclosure");
+    }
+
+    #[test]
+    fn test_detect_stack_trace() {
+        let content = "Exception in thread \"main\" java.lang.NullPointerException\n    at com.example.MyClass.doSomething(MyClass.java:15)\n    at com.example.Main.main(Main.java:5)";
+        let findings = detect_tech_stack_errors(content);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].error_type, "Stack Trace");
+    }
+
+    #[test]
+    fn test_no_tech_stack_errors() {
+        let content = "<h1>Welcome to our secure application</h1><p>No errors here!</p>";
+        let findings = detect_tech_stack_errors(content);
+        assert!(findings.is_empty());
+    }
+}

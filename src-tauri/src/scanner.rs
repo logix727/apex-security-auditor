@@ -15,7 +15,14 @@ pub struct ScanResult {
     pub discovered_urls: Vec<String>,
 }
 
-pub async fn scan_url(client: &Client, url: &str, method: &str) -> ScanResult {
+pub async fn scan_url(
+    client: &Client,
+    url: &str,
+    method: &str,
+    rate_limiter: &crate::core::rate_limiter::RateLimiter,
+) -> ScanResult {
+    // Wait for the rate limit before making any request
+    rate_limiter.wait().await;
     let method_type = match method.to_uppercase().as_str() {
         "POST" => reqwest::Method::POST,
         "PUT" => reqwest::Method::PUT,

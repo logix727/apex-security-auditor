@@ -19,8 +19,8 @@ impl SqliteDatabase {
         let conn = self.conn.lock().map_err(|e| crate::error::Error::Internal(e.to_string()))?;
 
         conn.execute(
-            "INSERT INTO sequence_steps (sequence_id, asset_id, method, url, status_code, request_body, response_body, request_headers, response_headers)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO sequence_steps (sequence_id, asset_id, method, url, status_code, request_body, response_body, request_headers, response_headers, captures)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             (
                 &step.sequence_id, 
                 &step.asset_id, 
@@ -30,7 +30,8 @@ impl SqliteDatabase {
                 &step.request_body, 
                 &step.response_body,
                 &step.request_headers,
-                &step.response_headers
+                &step.response_headers,
+                serde_json::to_string(&step.captures).unwrap_or_else(|_| "[]".to_string())
             ),
         )?;
 
@@ -54,7 +55,7 @@ impl SqliteDatabase {
         let (seq_id, name, created_at, context_summary) = entry;
 
         let mut steps_stmt = conn.prepare(
-            "SELECT id, sequence_id, asset_id, method, url, status_code, request_body, response_body, request_headers, response_headers, timestamp 
+            "SELECT id, sequence_id, asset_id, method, url, status_code, request_body, response_body, request_headers, response_headers, timestamp, captures 
              FROM sequence_steps 
              WHERE sequence_id = ?1 
              ORDER BY timestamp ASC"
@@ -73,6 +74,7 @@ impl SqliteDatabase {
                 request_headers: row.get(8)?,
                 response_headers: row.get(9)?,
                 timestamp: row.get(10)?,
+                captures: serde_json::from_str(&row.get::<_, String>(11).unwrap_or_else(|_| "[]".to_string())).unwrap_or_default(),
             })
         })?;
 

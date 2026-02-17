@@ -64,7 +64,7 @@ export interface TreeNode {
   assetCount?: number;
 }
 
-export type ActiveView = 'dashboard' | 'workbench' | 'assets' | 'surface' | 'discovery' | 'settings';
+export type ActiveView = 'dashboard' | 'workbench' | 'assets' | 'surface' | 'discovery' | 'settings' | 'intercept' | 'sequences';
 export type AssetSidebarView = 'folders' | 'tree';
 
 export interface SortConfig {
@@ -154,12 +154,15 @@ export interface ImportOperation {
 }
 
 export interface ImportHistoryEntry {
-  id: string;
+  id: number;
+  import_id: string;
   source: string;
   total_assets: number;
-  successful: number;
-  failed: number;
-  duplicates: number;
+  successful_assets: number;
+  failed_assets: number;
+  duplicate_assets: number;
+  status: string;
+  destination?: string; // Mapped from options.destination
   created_at: string;
   completed_at?: string;
   duration_ms: number;
@@ -178,4 +181,34 @@ export interface ImportQueueItem {
   operation: ImportOperation;
   priority: number;
   addedAt: string;
+}
+
+// Sequence Analysis Types
+export interface VariableCapture {
+  name: string;
+  source: string; // e.g. "json:body.id" or "header:Authorization"
+  regex?: string;
+}
+
+export interface SequenceStep {
+  id: number;
+  sequence_id: string;
+  asset_id: number;
+  method: string;
+  url: string;
+  status_code: number;
+  request_body: string | null;
+  response_body: string | null;
+  request_headers: string | null;
+  response_headers: string | null;
+  timestamp: string;
+  captures: VariableCapture[];
+}
+
+export interface RequestSequence {
+  id: string;
+  flow_name: string | null;
+  steps: SequenceStep[];
+  created_at: string;
+  context_summary: string | null;
 }

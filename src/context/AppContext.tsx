@@ -7,25 +7,25 @@ import { useAssetFilter } from '../hooks/useAssetFilter';
 interface AppContextType {
     // Core Data
     assets: Asset[];
-    setAssets: (assets: Asset[]) => void;
+    setAssets: React.Dispatch<React.SetStateAction<Asset[]>>;
     folders: Folder[];
-    setFolders: (folders: Folder[]) => void;
+    setFolders: React.Dispatch<React.SetStateAction<Folder[]>>;
     
     // Selection & Navigation
     activeFolderId: number | null;
-    setActiveFolderId: (id: number | null) => void;
+    setActiveFolderId: React.Dispatch<React.SetStateAction<number | null>>;
     selectedIds: Set<number>;
-    setSelectedIds: (ids: Set<number>) => void;
+    setSelectedIds: React.Dispatch<React.SetStateAction<Set<number>>>;
     lastClickedId: number | null;
-    setLastClickedId: (id: number | null) => void;
+    setLastClickedId: React.Dispatch<React.SetStateAction<number | null>>;
     selectedTreePath: string | null;
-    setSelectedTreePath: (path: string | null) => void;
+    setSelectedTreePath: React.Dispatch<React.SetStateAction<string | null>>;
     workbenchIds: Set<number>;
-    setWorkbenchIds: (ids: Set<number>) => void;
+    setWorkbenchIds: React.Dispatch<React.SetStateAction<Set<number>>>;
     
     // UI State
     contextMenu: { x: number, y: number, id: number } | null;
-    setContextMenu: (menu: { x: number, y: number, id: number } | null) => void;
+    setContextMenu: React.Dispatch<React.SetStateAction<{ x: number, y: number, id: number } | null>>;
 
     // Filters & Sorting
     searchTerm: string;

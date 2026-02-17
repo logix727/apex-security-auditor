@@ -10,9 +10,11 @@ import { WorkbenchView } from './workbench/WorkbenchView';
 import { AssetsView } from './assets/AssetsView';
 import { SurfaceView } from './surface/SurfaceView';
 import { DiscoveryView } from './discovery/DiscoveryView';
-import { SettingsView } from './Settings';
+import { Settings } from './Settings';
 import { Inspector } from './Inspector';
 import { ImportManager } from './ImportManager';
+import { InterceptView } from './proxy/InterceptView';
+import { SequenceEditor } from './sequence/SequenceEditor';
 import { SmartFilterCommandBar } from './summary/SmartFilterCommandBar';
 import { SequenceAnalysisModal } from './modals/SequenceAnalysisModal';
 import { ShadowApiReport } from './assets/ShadowApiReport';
@@ -20,15 +22,15 @@ import { DebugConsole, useDebugLogger } from './DebugConsole';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { 
-    Asset, 
+    Asset,
     TreeNode, 
     ImportOptions, 
     ImportDestination, 
     ImportProgress,
-    ImportQueueItem
+    ActiveView
 } from '../types';
 import { getDetectionBadges, getSourceIcon, getStatusBadge } from '../utils/assetUtils';
-import { Activity, Folder as FolderIcon } from 'lucide-react';
+import { Folder as FolderIcon } from 'lucide-react';
 
 export const AppContent: React.FC = () => {
     const { 
@@ -41,13 +43,11 @@ export const AppContent: React.FC = () => {
 
     const {
         assets, setAssets, 
-        folders, loadFolders, loadAssets, refreshData,
+        folders, loadFolders, loadAssets, 
         activeFolderId, setActiveFolderId,
         selectedIds, setSelectedIds,
-        lastClickedId, setLastClickedId,
-        selectedTreePath, setSelectedTreePath,
+        setSelectedTreePath,
         workbenchIds, setWorkbenchIds,
-        contextMenu, setContextMenu,
         handleAssetMouseDown, handleContextMenu,
         workbenchFilterAdapter,
         filterMethod, setFilterMethod,
@@ -64,7 +64,7 @@ export const AppContent: React.FC = () => {
         isSequenceModalOpen, setIsSequenceModalOpen,
         sequenceAnalysis, 
         isAnalyzingSequence,
-        sequenceFlowName, setSequenceFlowName,
+        sequenceFlowName, 
         proxyRunning, handleToggleProxy,
         activeShadowApiReport, setActiveShadowApiReport,
         lastSpecContent, setLastSpecContent,
@@ -75,10 +75,27 @@ export const AppContent: React.FC = () => {
     const [isImportManagerOpen, setIsImportManagerOpen] = useState(false);
     const [droppedFiles, setDroppedFiles] = useState<File[] | null>(null);
     const [dragActive, setDragActive] = useState(false);
-    const [_dragCounter, setDragCounter] = useState(0);
-    const [, setImportQueue] = useState<ImportQueueItem[]>([]);
-    const [, setActiveImportProgress] = useState<ImportProgress | null>(null);
+    const [, setDragCounter] = useState(0);
+    const [decodedJwt, setDecodedJwt] = useState<any | null>(null);
     const { info, error, success } = useDebugLogger();
+
+    const workbenchSummary = useMemo(() => {
+        const wbAssets = assets.filter(a => workbenchIds.has(a.id));
+        if (wbAssets.length === 0) return null;
+        
+        const allFindings = wbAssets.flatMap(a => a.findings);
+        const totalRisk = wbAssets.reduce((acc, a) => acc + (a.risk_score || 0), 0);
+        const avgRisk = totalRisk / wbAssets.length;
+        
+        return {
+            count: wbAssets.length,
+            avgRisk,
+            criticalCount: allFindings.filter(f => f.severity === 'Critical').length,
+            findings: allFindings,
+            safeCount: wbAssets.filter(a => (a.risk_score || 0) < 30).length,
+            warningCount: wbAssets.filter(a => (a.risk_score || 0) >= 30 && (a.risk_score || 0) < 70).length
+        };
+    }, [assets, workbenchIds]);
 
     // Domain Tree Construction
     const domainTree = useMemo(() => {
@@ -147,9 +164,8 @@ export const AppContent: React.FC = () => {
         for (const assetId of ids) {
             await invoke('update_asset_source', { id: assetId, source: 'Workbench' });
         }
-        // Optimistic update
-        setAssets(prev => prev.map(a => ids.includes(a.id) ? { ...a, source: 'Workbench' } : a));
-        setWorkbenchIds(prev => {
+        setAssets((prev: Asset[]) => prev.map((a: Asset) => ids.includes(a.id) ? { ...a, source: 'Workbench' } : a));
+        setWorkbenchIds((prev: Set<number>) => {
             const next = new Set(prev);
             ids.forEach(i => next.add(i));
             return next;
@@ -164,8 +180,8 @@ export const AppContent: React.FC = () => {
         for (const assetId of ids) {
             await invoke('update_asset_source', { id: assetId, source: 'User' });
         }
-        setAssets(prev => prev.map(a => ids.includes(a.id) ? { ...a, source: 'User' } : a));
-        setWorkbenchIds(prev => {
+        setAssets((prev: Asset[]) => prev.map((a: Asset) => ids.includes(a.id) ? { ...a, source: 'User' } : a));
+        setWorkbenchIds((prev: Set<number>) => {
             const next = new Set(prev);
             ids.forEach(i => next.delete(i));
             return next;
@@ -174,7 +190,7 @@ export const AppContent: React.FC = () => {
     };
 
     const handleRescan = async (id?: number) => {
-        const idsToRescan = id ? [id] : (selectedIds.size > 0 ? Array.from(selectedIds) : (lastClickedId ? [lastClickedId] : []));
+        const idsToRescan = id ? [id] : (selectedIds.size > 0 ? Array.from(selectedIds) : []);
         info('scanner', `Starting rescan of ${idsToRescan.length} assets`);
         for (const rescanId of idsToRescan) {
             try {
@@ -216,7 +232,7 @@ export const AppContent: React.FC = () => {
         }
     };
 
-    const handleImport = async (assetsToImport: { url: string; method: string; recursive: boolean; source: string }[], destination: ImportDestination, options: ImportOptions) => {
+    const handleImport = async (assetsToImport: any[], destination: ImportDestination, options: ImportOptions) => {
           const globalSource = destination === 'workbench' ? 'Workbench' : 'Import';
           if (assetsToImport.length === 0) {
               info('import', "No assets were selected for import.");
@@ -227,55 +243,34 @@ export const AppContent: React.FC = () => {
           const rateLimitMs = options.batchMode ? (options.rateLimitMs || 100) : 0;
           const totalAssets = assetsToImport.length;
           
-          info('import', `Starting structured import of ${totalAssets} assets to ${destination}. Batch: ${batchSize}, Rate: ${rateLimitMs}ms`);
+          info('import', `Starting structured import of ${totalAssets} assets to ${destination}.`);
           
           let allNewIds: number[] = [];
           
           try {
             for (let i = 0; i < totalAssets; i += batchSize) {
                 const batch = assetsToImport.slice(i, i + batchSize);
-                const batchNum = Math.floor(i / batchSize) + 1;
-                const totalBatches = Math.ceil(totalAssets / batchSize);
-                
-                if (totalBatches > 1) {
-                    info('import', `Importing batch ${batchNum}/${totalBatches} (${batch.length} assets)...`);
-                }
-    
                 const newIds = await invoke<number[]>('import_staged_assets', {
                   assets: batch,
                   source: globalSource
                 });
-                
                 allNewIds = [...allNewIds, ...newIds];
-    
                 if (i + batchSize < totalAssets && rateLimitMs > 0) {
                     await new Promise(resolve => setTimeout(resolve, rateLimitMs));
                 }
             }
             
-            if (allNewIds.length === 0) {
-                info('import', `Backend returned 0 imported assets.`);
-            }
-    
             if (destination === 'workbench') {
-                setWorkbenchIds(prev => {
+                setWorkbenchIds((prev: Set<number>) => {
                     const next = new Set(prev);
                     allNewIds.forEach(id => next.add(id));
                     return next;
                 });
-                setActiveView('workbench');
-                setSearchTerm('');
-                setFilterMethod('All');
-                setFilterStatus('All');
-                
-                success('workbench', `Added ${allNewIds.length} assets to Workbench session.`);
+                setActiveView('workbench' as ActiveView);
+                success('workbench', `Added ${allNewIds.length} assets to Workbench.`);
             } else {
-                 setActiveView('assets');
+                 setActiveView('assets' as ActiveView);
                  setActiveFolderId(1);
-                 setSearchTerm('');
-                 setFilterMethod('All');
-                 setFilterStatus('All');
-                 setSelectedTreePath(null);
                  success('import', `Successfully imported ${allNewIds.length} assets.`);
             }
           } catch (e) {
@@ -310,9 +305,7 @@ export const AppContent: React.FC = () => {
         const handleDragOver = (e: DragEvent) => { 
             e.preventDefault(); 
             e.stopPropagation(); 
-            if (e.dataTransfer) {
-                e.dataTransfer.dropEffect = 'copy';
-            }
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
         };
 
         const handleDrop = async (e: DragEvent) => {
@@ -344,20 +337,15 @@ export const AppContent: React.FC = () => {
     // Listeners
     useEffect(() => {
          let cleanup: (() => void)[] = [];
-         // Add listeners for import progress, scan update, etc.
-         // (Simplified for now, similar to App.tsx)
          const setupListeners = async () => {
-             const u1 = await listen<ImportProgress>('import-progress', (event) => {
-                 setActiveImportProgress(event.payload);
+             const u1 = await listen<ImportProgress>('import-progress', (_event) => {
+                 // Update internal progress if needed
              });
              cleanup.push(() => u1());
-             
-             // Add other listeners as needed
          };
          setupListeners();
          return () => cleanup.forEach(f => f());
     }, []);
-
 
     // Resizing Logic
     const isResizing = useRef(false);
@@ -366,11 +354,7 @@ export const AppContent: React.FC = () => {
     const resize = useCallback((e: MouseEvent) => {
         if (!isResizing.current) return;
         const newWidth = window.innerWidth - e.clientX;
-        const minWidth = 300;
-        const maxWidth = 800;
-        if (newWidth >= minWidth && newWidth <= maxWidth) {
-            setInspectorWidth(newWidth);
-        }
+        if (newWidth >= 300 && newWidth <= 800) setInspectorWidth(newWidth);
     }, [setInspectorWidth]);
 
     useEffect(() => {
@@ -383,15 +367,29 @@ export const AppContent: React.FC = () => {
     }, [resize]);
 
 
-    const handleExport = async (format: 'markdown' | 'csv') => {
+    const handleExport = async (format: 'markdown' | 'csv' | 'html') => {
         try {
-            const command = format === 'markdown' ? 'generate_audit_report' : 'export_to_csv_final_v5';
-            const result = await invoke<string>(command);
-            const blob = new Blob([result], { type: format === 'markdown' ? 'text/markdown' : 'text/csv' });
+            let command = 'generate_audit_report';
+            let args = {};
+
+            if (format === 'csv') {
+                command = 'export_findings_to_csv';
+                args = { scope: 'suspects' }; // Default to suspects for now to match previous behavior
+            } else if (format === 'html') {
+                command = 'generate_html_report';
+            }
+
+            const result = await invoke<string>(command, args);
+            
+            let mimeType = 'text/markdown';
+            if (format === 'csv') mimeType = 'text/csv';
+            if (format === 'html') mimeType = 'text/html';
+
+            const blob = new Blob([result], { type: mimeType });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `APEX_Export_${new Date().toLocaleDateString()}.${format === 'markdown' ? 'md' : 'csv'}`;
+            a.download = `APEX_Export_${new Date().toLocaleDateString()}.${format}`;
             a.click();
             success('export', `Exported as ${format}`);
         } catch(e) {
@@ -406,7 +404,7 @@ export const AppContent: React.FC = () => {
                 return <DashboardView 
                     assets={assets} 
                     folders={folders} 
-                    setActiveView={setActiveView} 
+                    setActiveView={setActiveView as any} 
                 />;
             case 'workbench':
                 return <WorkbenchView 
@@ -421,7 +419,8 @@ export const AppContent: React.FC = () => {
                     onPromoteToAssetManager={handlePromoteToAssetManager}
                     onExportMarkdown={() => handleExport('markdown')}
                     onExportCsv={() => handleExport('csv')}
-                    onSelectionChange={setSelectedIds}
+                    onExportHtml={() => handleExport('html')}
+                    onSelectionChange={setSelectedIds as any}
                     smartFilter={smartFilter}
                     setSmartFilter={setSmartFilter}
                     proxyRunning={proxyRunning}
@@ -441,7 +440,7 @@ export const AppContent: React.FC = () => {
                     onContextMenu={handleContextMenu}
                     onSort={handleSort}
                     sortConfig={sortConfig}
-                    selectedTreePath={selectedTreePath}
+                    selectedTreePath={null}
                     setSelectedTreePath={setSelectedTreePath}
                     filterMethod={filterMethod}
                     setFilterMethod={setFilterMethod}
@@ -449,7 +448,6 @@ export const AppContent: React.FC = () => {
                     setFilterStatus={setFilterStatus}
                     smartFilter={smartFilter}
                     setSmartFilter={setSmartFilter}
-                    
                     domainTree={domainTree}
                     onAddFolder={handleAddFolder}
                     onMoveToFolder={handleMoveToFolder}
@@ -457,19 +455,22 @@ export const AppContent: React.FC = () => {
                     onAddToWorkbench={handleAddToWorkbench}
                     onOpenImport={() => setIsImportManagerOpen(true)}
                     onAnalyzeFlow={handleAnalyzeFlow}
-                    
                     getStatusBadge={getStatusBadge}
                     getDetectionBadges={getDetectionBadges}
                     getSourceIcon={getSourceIcon}
-                    visibleColumns={new Set(['url', 'method', 'status', 'detections', 'source'])} // Defaults
-                    setVisibleColumns={() => {}} // Not implemented in context yet, stubbing
+                    visibleColumns={new Set(['url', 'method', 'status', 'detections', 'source'])}
+                    setVisibleColumns={() => {}} 
                 />;
             case 'surface':
                 return <SurfaceView assets={assets} />;
+            case 'intercept':
+                return <InterceptView />;
+            case 'sequences':
+                return <SequenceEditor />;
             case 'discovery':
                 return <DiscoveryView />;
             case 'settings':
-                return <SettingsView 
+                return <Settings 
                     llmEngineType={useAnalysis().llmEngineType}
                     setLlmEngineType={useAnalysis().setLlmEngineType}
                     llmFormProvider={useAnalysis().llmFormProvider}
@@ -501,9 +502,6 @@ export const AppContent: React.FC = () => {
         : null;
 
     const showInspector = activeView === 'workbench' || (activeView === 'assets' && selectedIds.size === 1);
-
-    // Helpers function from useDebugLogger we can't easily destructure in top scope due to rules of hooks?
-    // useDebugLogger returns { info, error, success } which we already have.
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'var(--font-family)', overflow: 'hidden' }}>
@@ -537,25 +535,26 @@ export const AppContent: React.FC = () => {
                         />
                         <div style={{ width: inspectorWidth, display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
                             <Inspector 
-                                asset={selectedAsset}
-                                width={inspectorWidth}
-                                activeTab={activeInspectorTab}
-                                onTabChange={setActiveInspectorTab}
-                                onClose={() => setSelectedIds(new Set())}
-                                onAnalyze={handleAnalyzeFlow}
-                                isAnalyzing={isAnalyzingSequence}
-                                analysisResult={sequenceAnalysis}
+                                inspectorAsset={selectedAsset}
+                                workbenchSummary={workbenchSummary}
+                                activeInspectorTab={activeInspectorTab}
+                                setActiveInspectorTab={setActiveInspectorTab}
                                 bodySearchTerm={bodySearchTerm}
                                 setBodySearchTerm={setBodySearchTerm}
-                                selectedCount={selectedIds.size}
                                 handleRescan={handleRescan}
+                                showInspector={showInspector}
+                                inspectorWidth={inspectorWidth}
+                                selectedIdsCount={selectedIds.size}
+                                activeView={activeView}
+                                decodedJwt={decodedJwt}
+                                setDecodedJwt={setDecodedJwt}
+                                onRefresh={loadAssets}
                             />
                         </div>
                     </>
                 )}
             </div>
 
-            {/* Modals & Overlays */}
             <SmartFilterCommandBar 
                 isOpen={showCommandBar} 
                 onClose={() => setShowCommandBar(false)}
@@ -613,15 +612,18 @@ export const AppContent: React.FC = () => {
                  <SequenceAnalysisModal
                     isOpen={isSequenceModalOpen}
                     onClose={() => setIsSequenceModalOpen(false)}
-                    flowName={sequenceFlowName}
+                    flowName={sequenceFlowName || 'Untitled Flow'}
                     analysis={sequenceAnalysis}
                     isLoading={isAnalyzingSequence}
                 />
             )}
             
-            {isDebugConsoleOpen && <DebugConsole />}
+            {isDebugConsoleOpen && <DebugConsole isOpen={isDebugConsoleOpen} onToggle={() => setIsDebugConsoleOpen(false)} />}
+            
+            <style>{`
+                .spin { animation: spin 1s linear infinite; }
+                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            `}</style>
         </div>
     );
 };
-
-

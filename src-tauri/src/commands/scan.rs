@@ -19,7 +19,7 @@ pub async fn rescan_asset(app: AppHandle, id: i64) -> Result<(), String> {
 
         tauri::async_runtime::spawn(async move {
             let db_state = app_handle.state::<SqliteDatabase>();
-            let result = scan_url(&db_state.client, &url, &method).await;
+            let result = scan_url(&db_state.client, &url, &method, &db_state.rate_limiter).await;
             let _ = db_state.update_scan_result(
                 id,
                 &result.status,

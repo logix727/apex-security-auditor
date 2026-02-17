@@ -1,5 +1,5 @@
 use crate::commands::debug::log_debug;
-use crate::db::{traits::DatabaseTrait, SqliteDatabase};
+use crate::db::SqliteDatabase;
 use crate::scan_url;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
@@ -46,7 +46,9 @@ pub fn start_background_monitor(app_handle: AppHandle) {
                             }
 
                             let db_state = handle.state::<SqliteDatabase>();
-                            let result = scan_url(&db_state.client, &url, &method).await;
+                            let result =
+                                scan_url(&db_state.client, &url, &method, &db_state.rate_limiter)
+                                    .await;
                             let _ = db_state.update_scan_result(
                                 id,
                                 &result.status,

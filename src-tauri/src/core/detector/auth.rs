@@ -44,3 +44,35 @@ pub fn detect_auth_issues(url: &str, body: &str, headers: &str) -> Vec<SecretFin
 
     findings
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_jwt_alg_none() {
+        let headers = "Authorization: Bearer eyJhbGciOiJub25lInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.xxx";
+        let findings = detect_auth_issues("https://api.example.com", "", headers);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].secret_type, "JWT alg:none");
+        assert_eq!(findings[0].severity, FindingSeverity::Critical);
+    }
+
+    #[test]
+    fn test_detect_unencrypted_basic_auth() {
+        let url = "http://api.example.com/v1/user";
+        let headers = "Authorization: Basic dXNlcjpwYXNz\nContent-Type: application/json";
+        let findings = detect_auth_issues(url, "", headers);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].secret_type, "Unencrypted Basic Auth");
+        assert_eq!(findings[0].severity, FindingSeverity::High);
+    }
+
+    #[test]
+    fn test_no_auth_issues() {
+        let url = "https://api.example.com/v1/user";
+        let headers = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxx.yyy";
+        let findings = detect_auth_issues(url, "", headers);
+        assert!(findings.is_empty());
+    }
+}

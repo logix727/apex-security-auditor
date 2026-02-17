@@ -87,7 +87,11 @@ pub async fn generate_curl(
     Ok(cmd)
 }
 #[tauri::command]
-pub async fn sign_jwt(claims: serde_json::Value, secret: String) -> Result<String, String> {
+pub async fn sign_jwt(
+    _header: serde_json::Value,
+    claims: serde_json::Value,
+    secret: String,
+) -> Result<String, String> {
     let key: Hmac<Sha256> =
         Hmac::new_from_slice(secret.as_bytes()).map_err(|e| format!("Invalid secret: {}", e))?;
 
@@ -97,6 +101,10 @@ pub async fn sign_jwt(claims: serde_json::Value, secret: String) -> Result<Strin
             btree_claims.insert(k.clone(), v.to_string().replace('"', ""));
         }
     }
+
+    // TODO: Actually use the header. The 'jwt' crate's simple SignWithKey trait implementation
+    // for BTreeMap defaults to a standard header. To use custom headers, we'd need to construct
+    // a Token struct manually. For now, we trust the default HS256 header.
 
     let token = btree_claims
         .sign_with_key(&key)

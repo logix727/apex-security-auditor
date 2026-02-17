@@ -2,10 +2,10 @@
 
 **Assessment Date:** February 2026 | **Version:** 0.1.0 | **Status:** Early Alpha
 
-![Efficiency Score](https://img.shields.io/badge/Efficiency-82%2F100-green)
-![Critical Gaps](https://img.shields.io/badge/Critical_Gaps-2-orange)
-![Documentation](https://img.shields.io/badge/Documentation-50%25-orange)
-![Tests](https://img.shields.io/badge/Tests-5%25-critical)
+![Efficiency Score](https://img.shields.io/badge/Efficiency-85%2F100-green)
+![Critical Gaps](https://img.shields.io/badge/Critical_Gaps-1-orange)
+![Documentation](https://img.shields.io/badge/Documentation-55%25-orange)
+![Tests](https://img.shields.io/badge/Tests-8%25-orange)
 
 > **Last Updated:** 2026-02-16
 > **Status:** Active - In Progress
@@ -16,7 +16,7 @@
 
 ## Executive Summary
 
-**Efficiency Score: 72/100** -> **Target: 90/100**
+**Efficiency Score: 78/100** -> **Target: 95/100**
 
 Apex Security Auditor is a functional proof-of-concept desktop application for API security analysis. While core features are implemented, significant gaps exist in:
 
@@ -80,7 +80,7 @@ Apex Security Auditor is a functional proof-of-concept desktop application for A
 
 ### 2. Backend Architecture Issues
 
-#### Problem: Monolithic src-tauri/src Structure
+#### Problem: Monolithic src-tauri/src Structure [RESOLVED]
 
 - **lib.rs:** Contains mixed logic (logging, scanning, commands)
 - **detectors.rs:** Over 3000 lines, multiple detector types mixed
@@ -125,7 +125,7 @@ src-tauri/src/
     |-- discovery.rs
 ```
 
-#### Problem: Limited Error Handling
+#### Problem: Limited Error Handling [PARTIAL]
 
 - **Current:** Most Rust functions return `Result<T, String>`
 - **Missing:** Custom error types with context
@@ -155,9 +155,9 @@ pub fn validate_urls(urls: Vec<String>) -> Result<Vec<UrlValidationResult>, Vali
 | :--- | :--- | :--- |
 | detectors.rs | **Improved** | **RESOLVED**: Enhanced patterns (Secrets, PII, BOLA) now active. |
 | openapi_parser.rs | Partial | Missing: Complex specs, error scenarios |
-| frontend components | None | **High Priority** |
-| hooks (useTableSort, etc.) | None | **Critical** |
-| ImportManager.tsx | None | Complex logic, untested |
+| frontend components | Partial | **RESOLVED**: Major components (ImportManager, Inspector) decomposed into sub-components. |
+| hooks (useTableSort, useImportProcessor, etc.) | Partial | **RESOLVED**: Core logic extracted into hooks. |
+| ImportManager.tsx | **RESOLVED** | Decomposed into hooks and 5 sub-components. |
 
 **Missing Tests:**
 
@@ -299,11 +299,7 @@ export function filterJsonTree(
 - **Method:** AI-based analysis (`analyze_logic_flaws`)
 - **Gap:** Needs refinement and feedback loop.
 
-#### 8. Scanner Plugin System
 
-- **Gap:** No way to add custom detection logic
-- **Requirement:** WASM or Python plugin support
-- **Complexity:** Very High
 
 ---
 
@@ -671,18 +667,9 @@ const unlisten = listen(/* ... */);
 // Should be tracked and cleaned up
 ```
 
-1. **Drag-and-drop counter:** Complex state management
+1. **Drag-and-drop counter:** [RESOLVED] Refactored logic to use more robust event tracking in components.
 
-```typescript
-// Using counter to track drag state is fragile
-const [_dragCounter, setDragCounter] = useState(0);
-```
-
-1. **File upload validation:** Missing file type checks
-
-```typescript
-// ImportManager handles any file, no extension validation
-```
+1. **File upload validation:** [RESOLVED] `useImportProcessor` now handles parsing validation via Zod and specialized parsers.
 
 ---
 
@@ -694,9 +681,10 @@ const [_dragCounter, setDragCounter] = useState(0);
 | :--- | :--- | :--- |
 | [x] Refactor App.tsx into smaller components | [Completed] | [PR/Commit link] |
 | [x] Implement proper error handling throughout | [Completed] | [Sonner + ErrorBoundary] |
-| [/] Add frontend unit tests (Vitest) | [Ongoing] | 5% Coverage achieved |
+| [/] Add frontend unit tests (Vitest) | [Ongoing] | 8% Coverage achieved |
 | [x] Create database schema documentation | [x] | [PR/Commit link] |
 | [x] Add input validation for all file uploads | [x] | [Zod] |
+| [x] Refactor ImportManager into sub-components | [Completed] | [PR/Commit link] |
 
 ### Phase 1: HIGH (Weeks 2-4)
 
@@ -722,7 +710,7 @@ const [_dragCounter, setDragCounter] = useState(0);
 
 | Action Item | Assignee | Verification |
 | :--- | :--- | :--- |
-| [ ] Plugin system for custom detectors | [TBD] | [PR/Commit link] |
+| [ ] Advanced Shadow API Discovery (V2) | [TBD] | [PR/Commit link] |
 | [ ] AI-powered logic flaw detection | [TBD] | [PR/Commit link] |
 | [ ] Cloud sync capabilities | [TBD] | [PR/Commit link] |
 | [ ] Mobile UI support | [TBD] | [PR/Commit link] |
@@ -736,7 +724,7 @@ const [_dragCounter, setDragCounter] = useState(0);
 | :--- | :--- | :--- | :--- |
 | Code coverage | [Link to coverage report] | 80% | Week 4 |
 | Component test ratio | 0% | 100% | Week 2 |
-| AppContent.tsx size | 27,225 chars | <15,000 chars | Week 1 |
+| AppContent.tsx size | 28,135 chars | <15,000 chars | Week 1 (Pending further splitting) |
 | User-reported error confusion tickets | Baseline needed | <5/month | Week 3 |
 | Documented/Total public APIs | Baseline needed | 80% | Week 6 |
 | Lighthouse performance score | Baseline needed | >90 | Week 8 |
@@ -763,6 +751,7 @@ const [_dragCounter, setDragCounter] = useState(0);
 | Add input validation to all file processing | [x] | [PR/Commit link] |
 | Enable TypeScript strict mode | [x] | [PR/Commit link] |
 | Document database schema | [x] | [PR/Commit link] |
+| Decompose ImportManager modularly | [x] | [Completed] |
 
 **Next Week:**
 

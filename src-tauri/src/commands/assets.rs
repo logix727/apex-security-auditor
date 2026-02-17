@@ -56,7 +56,8 @@ pub async fn import_assets(
 
                 tauri::async_runtime::spawn(async move {
                     let db_state = app_handle.state::<SqliteDatabase>();
-                    let result = scan_url(&db_state.client, &url_clone, "GET").await;
+                    let result =
+                        scan_url(&db_state.client, &url_clone, "GET", &db_state.rate_limiter).await;
                     let _ = db_state.update_scan_result(
                         id,
                         &result.status,
@@ -353,7 +354,7 @@ async fn process_import_asset_sync(
         .map_err(|e| e.to_string())?;
 
     // Scan the asset
-    let result = scan_url(&db.client, url, "GET").await;
+    let result = scan_url(&db.client, url, "GET", &db.rate_limiter).await;
     let _ = db.update_scan_result(
         asset_id,
         &result.status,
@@ -424,7 +425,7 @@ pub async fn reimport_assets(app: AppHandle, import_id: String) -> Result<Vec<i6
                 reimported_ids.push(id);
 
                 // Rescan the asset
-                let result = scan_url(&db.client, &asset.url, "GET").await;
+                let result = scan_url(&db.client, &asset.url, "GET", &db.rate_limiter).await;
                 let _ = db.update_scan_result(
                     id,
                     &result.status,
@@ -492,8 +493,13 @@ pub async fn import_staged_assets(
 
                 tauri::async_runtime::spawn(async move {
                     let db_state = app_handle.state::<SqliteDatabase>();
-                    let result =
-                        crate::scanner::scan_url(&db_state.client, &url_clone, &method_clone).await;
+                    let result = crate::scanner::scan_url(
+                        &db_state.client,
+                        &url_clone,
+                        &method_clone,
+                        &db_state.rate_limiter,
+                    )
+                    .await;
                     let _ = db_state.update_scan_result(
                         id,
                         &result.status,

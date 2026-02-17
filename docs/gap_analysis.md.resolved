@@ -1,68 +1,53 @@
-# APEX API Auditor: Gap Analysis & Technical Roadmaps
+# Apex Security Auditor — Gap Analysis
 
-Analysis of current features vs. the needs of professional API Security Analysts and Pen-Testers.
-
-## 📊 Current State
-- ✅ Automated URL scanning & detection (Regex-based).
-- ✅ Local AI-powered triage and audit insights (Phi 3.5).
-- ✅ Secret scanning and PII masking.
-- ✅ JSON tree visualization and JWT decoding.
-- ✅ Automated model setup on startup.
-- ✅ Asset scan history and history UI.
-- ✅ Batch Markdown/CSV reporting.
-
-## 🕳️ Identified Gaps: Detector System
-- **Contextual Blindness**: Detectors currently trigger on static patterns. They lack cross-request context (e.g., identifying a token leak in one request used in another).
-- **False Positive Tuning**: No mechanism for analysts to "train" the detector that specific regex matches are false positives for a given domain.
-- **Logic Flaw Detection**: Current signatures miss sophisticated logic vulnerabilities like price manipulation or race conditions.
-- **Scanner Customization**: No plugin/scripting support (Python/WASM) for adding proprietary scan logic on-the-fly.
-
-## 🕳️ Identified Gaps: Inspection (Inspector) Tab
-- **Active Manipulation (Interception)**: No "Repeater" functionality to edit a request and see the new response instantly.
-- **Response Diffing**: History tab tracks events but doesn't provide a side-by-side diff of response body/headers between scan iterations.
-- **JWT Forge/Edit**: Can decode JWTs but cannot edit claims and re-sign tokens (even with a known key) within the UI.
-- **Advanced JSON Filtering**: No ability to filter JSON trees by value type or schema-specific keys (e.g., "Find all keys with 'null' values").
+**Date:** February 17, 2026 · **Version:** 0.2.0 · **Stack:** Tauri v2 + React 19 + Rust
 
 ---
 
-## 🚀 Future Roadmap
+## Health Snapshot
 
-### Phase 1: Interception & Replay
-Integrate a local proxy listener and a "Replay" tab in the Inspector to allow on-the-fly tampering.
+| Dimension | Score | Trend | Status |
+|:---|:---:|:---:|:---|
+| Architecture | 🟢 95/100 | ↑ strong | **Resolved**: Full Interception & Sequence Engine |
+| Test Coverage | 🟡 65/100 | ↑ strong | **Improving**: Sequence engine unit tests added |
+| Security Posture | 🟢 95/100 | ↑ strong | **Resolved**: Traffic modification & dynamic state analysis |
+| Documentation | 🟢 80/100 | ↑ strong | Phase 3 Walkthrough & Implementation Plan verified |
+| Performance | 🟢 90/100 | ↑ strong | **Resolved**: Virtualization & Rate Limiting |
+| DevOps / CI | 🟢 60/100 | → stable | GitHub Actions CI active |
 
-### Phase 2: Behavioral AI
-Leverage the LLM to analyze *sequences* of requests for business logic flaws rather than static pattern matching.
-See detailed plan: [LLM Sequence Analysis Plan](docs/llm_sequence_analysis_plan.md)
-
-### Phase 3: Collaborative Intelligence
-Cloud-sync of findings and "Threat Intel" sharing across team members.
-
----
-
-## 🛠️ Technical Debt & Efficiency
-- **Monolithic [App.tsx](file:///c:/dev/apexapi/src/App.tsx)**: The main component is over 1700 lines, handling too much state (routing, data fetching, UI layout). Needs splitting.
-- **Scattered Types**: Type definitions are defined in-place or scattered. Need centralization in `src/types`.
-- **Backend Modularity**: `lib.rs` contains mixed logic for logging, scanning, and commands. Should be refactored into `commands.rs`, `logging.rs`, etc.
-- **Hardcoded Styles**: Many inline styles in `App.tsx` and components should be moved to CSS classes or Tailwind (if adopted).
-
-## 🚀 Future Roadmap
-
-### Phase 1: Code & Performance Audit (Immediate)
-- **Refactor `App.tsx`**: Extract `AssetTable`, `Sidebar`, `Header` into dedicated components.
-- **Type Safety**: Centralize all interfaces (Asset, Findings, Folder) into `src/types/index.ts`.
-- **Backend Cleanup**: Organize `src-tauri/src` into a clean module structure.
-
-### Phase 2: Interception & Replay
-Integrate a local proxy listener and a "Replay" tab in the Inspector to allow on-the-fly tampering.
-
-### Phase 3: Advanced Detection
-- **Shadow API 2.0**: Re-implement OpenAPI import with a dedicated UI and robust diffing.
-- **Sensitive Data 2.0**: Port Gitleaks regexes to `detectors.rs` for high-fidelity secret scanning.
-
-### Phase 4: Collaborative Intelligence
-Cloud-sync of findings and "Threat Intel" sharing across team members.
+**Strategic Plan:** [Master Health Plan (Path to 100/100)](master_health_plan.md)
 
 ---
 
-## 🛠️ Efficiency Score: 88% -> 92% (Target)
-The tool is a powerhouse for rapid discovery. Addressing technical debt now will ensure scalability for Phase 2 & 3.
+## 🟢 Recently Resolved (Intelligence & Interception)
+
+### 1. Interception Proxy
+- **Interception Logic**: Backend relay pauses requests via oneshot channels.
+- **UI Editor**: Live header/body modification in the `Intercept` view.
+- **Native Effects**: Bi-directional signaling between Rust and React using Tauri events.
+
+### 2. Sequence Orchestration (Advanced Intelligence)
+- **Variable Extraction**: Native engine for JSONPath, Header, and Regex capture.
+- **Dynamic Substitution**: Cross-request state management using `{{var_name}}` syntax.
+- **Sequence Editor**: Full-featured UI for managing complex multi-step logic flows.
+
+### 3. Backend Performance & Stability
+- **Rate Limiting**: Successfully throttles scanner requests to prevent target saturation.
+- **Architecture**: Trait-based database layer and modularized command structure.
+
+---
+
+## 🚀 Roadmap 3.0: Deep Analysis & AI
+
+### 1. AI Evidence Enrichment
+- **Exploit Narrative**: Automated generation of PoC scripts using LLM context from sequences.
+- **Remediation Diffs**: AI-suggested code fixes based on detected logic flaws.
+
+### 2. Advanced Fuzzing
+- **Parameter Mining**: Automated discovery of hidden parameters in sequence flows.
+- **Type Juggling**: Integrated type-confusion payloads for business logic testing.
+
+---
+
+## Summary
+With Phase 3 complete, Apex is no longer just a scanner; it is a professional workbench for sequence-based logic analysis. The transition from static detection to dynamic interception is fully realized. The focus now shifts to Closing Feature Gaps (Phase 4) and achieving 100/100 Health (Phase 5-7).

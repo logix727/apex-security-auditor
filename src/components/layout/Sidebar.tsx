@@ -5,7 +5,9 @@ import {
   Settings, 
   FileCode,
   Network,
-  Search
+  Search,
+  ShieldAlert,
+  ListOrdered
 } from 'lucide-react';
 import { ActiveView } from '../../types';
 
@@ -42,6 +44,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className={`nav-item ${activeView === 'settings' ? 'active' : ''}`} onClick={() => setActiveView('settings')}>
         <Settings size={18} /> Settings
+      </div>
+
+      <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+        <div className={`nav-item ${activeView === 'sequences' ? 'active' : ''}`} onClick={() => setActiveView('sequences')}>
+          <ListOrdered size={18} /> Sequences
+        </div>
+        <div className={`nav-item ${activeView === 'intercept' ? 'active' : ''}`} onClick={() => setActiveView('intercept')}>
+          <ShieldAlert size={18} /> Intercept
+        </div>
       </div>
 
     </nav>

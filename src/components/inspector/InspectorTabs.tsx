@@ -1,5 +1,5 @@
 import React from 'react';
-import { Info, Activity, Lock, Terminal } from 'lucide-react';
+import { Info, Activity, Lock, Terminal, SplitSquareHorizontal } from 'lucide-react';
 import { InspectorTab } from '../Inspector';
 
 interface InspectorTabsProps {
@@ -19,12 +19,13 @@ export const InspectorTabs: React.FC<InspectorTabsProps> = ({
 
     return (
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '16px', gap: '4px', padding: '0 12px' }}>
-            {(['Summary', 'Exchange', 'Security', 'Details'] as InspectorTab[]).map(tab => {
+            {(['Summary', 'Exchange', 'Security', 'Details', 'Diff'] as InspectorTab[]).map(tab => {
                 const Icon = ({
                     'Summary': Info,
                     'Exchange': Activity,
                     'Security': Lock,
-                    'Details': Terminal
+                    'Details': Terminal,
+                    'Diff': SplitSquareHorizontal
                 } as any)[tab];
 
                 const tabHasSecrets = tab === 'Security' && hasSecrets;
