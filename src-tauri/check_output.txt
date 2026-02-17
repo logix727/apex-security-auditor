@@ -1,70 +1,46 @@
     Checking tauri-appapex-security-auditor v0.1.0 (C:\dev\apexapi\src-tauri)
-warning: unused imports: `Arc` and `Mutex`
- --> src\lib.rs:2:17
+warning: unused import: `params`
+ --> src\db.rs:1:16
   |
-2 | use std::sync::{Arc, Mutex};
-  |                 ^^^  ^^^^^
+1 | use rusqlite::{params, Connection, Result};
+  |                ^^^^^^
   |
   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
 
-warning: unused import: `ScanResult`
-  --> src\lib.rs:10:25
-   |
-10 | use scanner::{scan_url, ScanResult};
-   |                         ^^^^^^^^^^
+warning: unused import: `Window`
+ --> src\commands\sequence.rs:3:20
+  |
+3 | use tauri::{State, Window};
+  |                    ^^^^^^
 
-error[E0599]: no method named `emit` found for struct `AppHandle<R>` in the current scope
-   --> src\lib.rs:57:44
+error[E0382]: use of moved value: `operation.import_id`
+   --> src\db.rs:700:14
     |
- 57 |                         let _ = app_handle.emit("scan-update", asset.id);
-    |                                            ^^^^
+687 |                 operation.import_id,
+    |                 ------------------- value moved here
+...
+700 |             [operation.import_id],
+    |              ^^^^^^^^^^^^^^^^^^^ value used here after move
     |
-   ::: C:\Users\mvsto\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.2\src\lib.rs:952:6
-    |
-952 |   fn emit<S: Serialize + Clone>(&self, event: &str, payload: S) -> Result<()> {
-    |      ---- the method is available for `AppHandle` here
-    |
-    = help: items from traits can only be used if the trait is in scope
-help: there is a method `exit` with a similar name, but with different arguments
-   --> C:\Users\mvsto\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.2\src\app.rs:532:3
-    |
-532 |   pub fn exit(&self, exit_code: i32) {
-    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: trait `Emitter` which provides `emit` is implemented but not in scope; perhaps you want to import it
-    |
-  1 + use tauri::Emitter;
-    |
+    = note: move occurs because `operation.import_id` has type `std::string::String`, which does not implement the `Copy` trait
 
-error[E0599]: no method named `emit` found for struct `AppHandle<R>` in the current scope
-   --> src\lib.rs:98:32
-    |
- 98 |             let _ = app_handle.emit("scan-update", id);
-    |                                ^^^^
-    |
-   ::: C:\Users\mvsto\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.2\src\lib.rs:952:6
-    |
-952 |   fn emit<S: Serialize + Clone>(&self, event: &str, payload: S) -> Result<()> {
-    |      ---- the method is available for `AppHandle` here
-    |
-    = help: items from traits can only be used if the trait is in scope
-help: there is a method `exit` with a similar name, but with different arguments
-   --> C:\Users\mvsto\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.2\src\app.rs:532:3
-    |
-532 |   pub fn exit(&self, exit_code: i32) {
-    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: trait `Emitter` which provides `emit` is implemented but not in scope; perhaps you want to import it
-    |
-  1 + use tauri::Emitter;
-    |
+error[E0382]: use of moved value: `id`
+    --> src\db.rs:1256:12
+     |
+1249 |         let id = uuid::Uuid::new_v4().to_string();
+     |             -- move occurs because `id` has type `std::string::String`, which does not implement the `Copy` trait
+...
+1253 |             (id, name, context_summary),
+     |              -- value moved here
+...
+1256 |         Ok(id)
+     |            ^^ value used here after move
+     |
+help: consider cloning the value if the performance cost is acceptable
+     |
+1253 |             (id.clone(), name, context_summary),
+     |                ++++++++
 
-warning: unused variable: `status_text`
-  --> src\scanner.rs:30:9
-   |
-30 |     let status_text = status_code.to_string();
-   |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_status_text`
-   |
-   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
-
-For more information about this error, try `rustc --explain E0599`.
-warning: `tauri-appapex-security-auditor` (lib) generated 3 warnings
-error: could not compile `tauri-appapex-security-auditor` (lib) due to 2 previous errors; 3 warnings emitted
+For more information about this error, try `rustc --explain E0382`.
+warning: `tauri-appapex-security-auditor` (lib) generated 2 warnings
+error: could not compile `tauri-appapex-security-auditor` (lib) due to 2 previous errors; 2 warnings emitted

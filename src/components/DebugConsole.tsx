@@ -1,16 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { ChevronUp, ChevronDown, Trash2, Filter, Terminal } from 'lucide-react';
+import { ChevronUp, ChevronDown, Trash2, Filter, Terminal, ArrowUp, ArrowDown } from 'lucide-react';
+import { DebugLogEntry, LogLevel } from '../types';
 
-// Log entry interface matching the requirement
-export interface LogEntry {
-  id: string;
-  timestamp: Date;
-  level: 'info' | 'warn' | 'error' | 'success';
-  source: string;
-  message: string;
-  details?: any;
-}
 
 // Props for the DebugConsole component
 interface DebugConsoleProps {
@@ -22,7 +14,10 @@ interface DebugConsoleProps {
 const MAX_LOG_ENTRIES = 500;
 
 // Log level filter options
-type LogLevelFilter = 'all' | 'info' | 'warn' | 'error' | 'success';
+type LogLevelFilter = 'all' | LogLevel;
+
+// Sort direction for logs
+type LogSortDirection = 'newest' | 'oldest';
 
 // Generate unique ID for log entries
 const generateLogId = (): string => {
@@ -41,18 +36,19 @@ const formatTimestamp = (date: Date): string => {
 
 // Debug Console Component
 export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logs, setLogs] = useState<DebugLogEntry[]>([]);
   const [filter, setFilter] = useState<LogLevelFilter>('all');
+  const [sortDirection, setSortDirection] = useState<LogSortDirection>('newest');
   const [autoScroll, setAutoScroll] = useState(true);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const unlistenRef = useRef<UnlistenFn | null>(null);
 
   // Add a new log entry
-  const addLog = useCallback((entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
-    const newEntry: LogEntry = {
+  const addLog = useCallback((entry: Omit<DebugLogEntry, 'id' | 'timestamp'>) => {
+    const newEntry: DebugLogEntry = {
       ...entry,
       id: generateLogId(),
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     };
 
     setLogs((prevLogs) => {
@@ -71,9 +67,20 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
   };
 
   // Filter logs based on selected level
-  const filteredLogs = filter === 'all' 
-    ? logs 
-    : logs.filter((log) => log.level === filter);
+  const filteredLogs = useMemo(() => {
+    let result = filter === 'all' 
+      ? logs 
+      : logs.filter((log) => log.level === filter);
+    
+    // Apply sorting
+    if (sortDirection === 'newest') {
+      result = [...result].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    } else {
+      result = [...result].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    }
+    
+    return result;
+  }, [logs, filter, sortDirection]);
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
@@ -86,7 +93,7 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
   useEffect(() => {
     const setupListener = async () => {
       try {
-        unlistenRef.current = await listen<LogEntry>('debug-log', (event) => {
+        unlistenRef.current = await listen<DebugLogEntry>('debug-log', (event) => {
           const payload = event.payload;
           addLog({
             level: payload.level,
@@ -172,7 +179,7 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
   }, [addLog]);
 
   // Get color for log level
-  const getLevelColor = (level: LogEntry['level']): string => {
+  const getLevelColor = (level: LogLevel): string => {
     switch (level) {
       case 'info':
         return '#ffffff';
@@ -188,7 +195,7 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
   };
 
   // Get badge style for log level
-  const getLevelBadgeClass = (level: LogEntry['level']): string => {
+  const getLevelBadgeClass = (level: LogLevel): string => {
     switch (level) {
       case 'info':
         return 'debug-level-info';
@@ -222,6 +229,8 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
                   value={filter}
                   onChange={(e) => setFilter(e.target.value as LogLevelFilter)}
                   className="debug-filter-select"
+                  aria-label="Filter by log level"
+                  title="Filter by log level"
                 >
                   <option value="all">All</option>
                   <option value="info">Info</option>
@@ -230,6 +239,16 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
                   <option value="success">Success</option>
                 </select>
               </div>
+
+              {/* Sort toggle */}
+              <button
+                className={`debug-btn ${sortDirection === 'oldest' ? 'active' : ''}`}
+                onClick={() => setSortDirection(prev => prev === 'newest' ? 'oldest' : 'newest')}
+                title={sortDirection === 'newest' ? 'Newest first - Click for oldest first' : 'Oldest first - Click for newest first'}
+              >
+                {sortDirection === 'newest' ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
+                {sortDirection === 'newest' ? 'Newest' : 'Oldest'}
+              </button>
 
               {/* Auto-scroll toggle */}
               <button
@@ -268,7 +287,7 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
             ) : (
               filteredLogs.map((log) => (
                 <div key={log.id} className="debug-log-entry">
-                  <span className="debug-log-timestamp">{formatTimestamp(log.timestamp)}</span>
+                  <span className="debug-log-timestamp">{formatTimestamp(new Date(log.timestamp))}</span>
                   <span className={`debug-log-level ${getLevelBadgeClass(log.level)}`}>
                     [{log.level.toUpperCase()}]
                   </span>
@@ -294,7 +313,7 @@ export function DebugConsole({ isOpen, onToggle }: DebugConsoleProps) {
 // Export a hook for programmatic logging from other components
 export function useDebugLogger() {
   const log = useCallback((
-    level: LogEntry['level'],
+    level: LogLevel,
     source: string,
     message: string,
     details?: any

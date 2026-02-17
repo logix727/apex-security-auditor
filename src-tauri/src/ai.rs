@@ -1,3 +1,4 @@
+use crate::commands::debug::{emit_log, LogLevel};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
@@ -152,6 +153,9 @@ pub struct LogicAuditInput {
 pub struct AssetSummaryInput {
     pub asset_url: String,
     pub findings: Vec<String>,
+    pub request_headers: String,
+    pub response_body_snippet: String,
+    pub headers_snippet: String,
     #[serde(default)]
     pub context: Option<String>,
 }
@@ -210,9 +214,9 @@ Analyze the following finding with technical precision.
 Provide your analysis in a structured, high-signal format:
 1. 📝 TECHNICAL SUMMARY: (Deep dive into the mechanism of the vulnerability)
 2. 🚨 RISK VECTORS: (Explain realistic exploit scenarios and blast radius)
-3. 🔬 EVIDENCE GAPS: (What else should a researcher check to confirm this?)
-4. 🛠️ REMEDIATION: (Specific, code-level fix for the development team)
-5. 🛡️ DEFENSIVE DEPTH: (Complementary security controls to prevent this class of issue)
+3. 🕵️ FALSE POSITIVE CHECK: (Critically evaluate if this could be a false positive based on the evidence)
+4. 🔬 EVIDENCE GAPS: (What else should a researcher check to confirm this?)
+5. 🛠️ REMEDIATION: (Specific, code-level fix for the development team)
 "#,
         input.asset_url, input.finding_type, input.response_body_snippet, context_section
     )
@@ -228,36 +232,47 @@ fn build_asset_summary_prompt(input: &AssetSummaryInput) -> String {
     let findings_list = input.findings.join("\n- ");
 
     format!(
-        r#"You are an EXPERT API SECURITY ANALYST.
-Analyze the security findings for this asset and provide a high-efficiency audit insight.
+        r#"You are an EXPERT API SECURITY ANALYST specializing in both vulnerability detection and business logic auditing.
+Analyze the security state of this asset based on the provided interaction.
 
 Asset URL: {}
 
-Findings Detected:
+Detected Vulns:
 - {}
+
+Request Headers:
+```
+{}
+```
+
+Response Preview:
+```
+{}
+```
+
+Response Headers:
+```
+{}
+```
 {}
 
 Instructions:
-1. FOCUS on the most critical findings first.
-2. ⛓️ Identify ATTACK CHAINS and BLAST RADIUS. How does this impact the API environment?
-3. Use EMOJIS (🛑, ⚠️, 🛠️, ⛓️, 🔍) to highlight key sections.
-4. Keep it technical and immersive. No "Executive Summary" fluff.
+1. 🛑 REASSESS findings: Do NOT blindly accept the detected findings. Use the response/headers to confirm them. If they look like False Positives (e.g. standard 401, public endpoint), label them as such.
+2. ⚖️ LOGIC AUDIT: Look for business logic flaws (IDOR, Numerical tampering, Auth bypass).
+3. 🔍 EVIDENCE: Reference specific data points from the preview (field names, header values) to justify your audit.
+4. 📈 SUMMARY: Output EXACTLY 3-4 bullet points max.
+5. Emojis: 🛑 (Critical), ⚠️ (Med/High), ℹ️ (Low/Info), ✅ (FP/Safe).
 
 Output Format (Markdown):
-# 🔍 RAPID TRIAGE: {}
-[Technical overview of the exposure in 2 sentences. Be direct.]
-
-# 🕵️ CRITICAL EXPOSURE
-- [Exposure 1]: [Technical detail + Why it matters]
-- [Exposure 2]: [Technical detail]
-
-# ⛓️ POSSIBLE ATTACK PATH
-[Describe how an attacker would realistically exploit these findings in a chain.]
-
-# 🛠️ REMEDIATION PRIORITY
-[Specific technical action to take immediately.]
+# 🔍 SECURITY AUDIT
+- [EMOJI] [CATEGORY]: [Detailed observation citing specific evidence]
 "#,
-        input.asset_url, findings_list, context_section, input.asset_url
+        input.asset_url,
+        findings_list,
+        input.request_headers,
+        input.response_body_snippet,
+        input.headers_snippet,
+        context_section
     )
 }
 
@@ -294,6 +309,9 @@ Output Format (Markdown):
 # ⚖️ BUSINESS LOGIC AUDIT
 ## 🔎 CRITICAL OBSERVATIONS
 [Technical deep dive into suspicious parameters or behavior]
+
+## 🕵️ FALSE POSITIVE CHECK
+[Critically evaluate if the observed behavior is actually standard for this API type (e.g. 404 on missing ID is normal)]
 
 ## 🚨 POTENTIAL VULNERABILITIES
 - [Vulnerability Name]: [Detailed Exploit Scenario]
@@ -491,6 +509,9 @@ pub async fn analyze_finding(
 pub async fn analyze_asset_summary(
     asset_url: String,
     findings: Vec<String>,
+    request_headers: String,
+    response_body_snippet: String,
+    headers_snippet: String,
     context: Option<String>,
 ) -> Result<AnalyzeAssetSummaryOutput, String> {
     let config = LlmConfig::load();
@@ -498,6 +519,9 @@ pub async fn analyze_asset_summary(
     let input = AssetSummaryInput {
         asset_url,
         findings,
+        request_headers,
+        response_body_snippet,
+        headers_snippet,
         context,
     };
 
@@ -518,6 +542,97 @@ pub async fn analyze_asset_summary(
 
     Ok(AnalyzeAssetSummaryOutput {
         summary,
+        provider: provider_display.to_string(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SequenceAnalysisInput {
+    pub sequence: crate::data::RequestSequence,
+    #[serde(default)]
+    pub context: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SequenceAnalysisOutput {
+    pub analysis: String,
+    pub provider: String,
+}
+
+fn build_sequence_analysis_prompt(input: &SequenceAnalysisInput) -> String {
+    let steps_text = input.sequence.steps.iter().enumerate().map(|(i, step)| {
+        format!(
+            "STEP {}: {} {}\nStatus: {}\nRequest Headers: {:?}\nRequest Body: {:?}\nResponse Body Snippet: {:?}\n",
+            i + 1,
+            step.method,
+            step.url,
+            step.status_code,
+            step.request_headers,
+            step.request_body,
+            step.response_body.as_ref().map(|b| b.chars().take(200).collect::<String>()).unwrap_or_default()
+        )
+    }).collect::<Vec<_>>().join("\n---\n");
+
+    format!(
+        r#"You are a LOGIC FLAW EXPERT.
+Analyze the following HTTP request sequence for authorization bypasses, IDOR, and logic flaws.
+
+FLOW NAME: {}
+CONTEXT: {}
+
+SEQUENCE:
+{}
+
+INSTRUCTIONS:
+1. Identify if the sequence enforces proper state transitions.
+2. Check if resources created in previous steps are accessed securely in later steps.
+3. Look for IDOR (e.g., using an ID from step 1 in step 2 without auth).
+
+OUTPUT FORMAT:
+# ⛓️ SEQUENCE ANALYSIS
+## 🚨 DETECTED FLAWS
+- [FLAW_NAME]: [Description]
+
+## ✅ GOOD PRACTICES
+- [Description]
+
+## 🛠️ RECOMMENDATIONS
+- [Actionable Fix]
+"#,
+        input
+            .sequence
+            .flow_name
+            .as_deref()
+            .unwrap_or("Unnamed Flow"),
+        input.context.as_deref().unwrap_or("None"),
+        steps_text
+    )
+}
+
+#[tauri::command]
+pub async fn analyze_sequence(
+    sequence: crate::data::RequestSequence,
+    context: Option<String>,
+) -> Result<SequenceAnalysisOutput, String> {
+    let config = LlmConfig::load();
+    let provider_display = match config.provider_type {
+        ProviderType::OpenAI => "OpenAI",
+        ProviderType::Anthropic => "Anthropic",
+        ProviderType::Local => "Local",
+    };
+
+    if !config.is_configured() {
+        return Err("LLM not configured.".to_string());
+    }
+
+    let input = SequenceAnalysisInput { sequence, context };
+    let prompt = build_sequence_analysis_prompt(&input);
+    let analysis = call_llm_api(&config, &prompt)
+        .await
+        .map_err(|e| format!("{}: {}", provider_display, e))?;
+
+    Ok(SequenceAnalysisOutput {
+        analysis,
         provider: provider_display.to_string(),
     })
 }
@@ -578,9 +693,9 @@ pub fn is_model_present(model_name: &str) -> bool {
 
 pub async fn ensure_model_present(handle: AppHandle, model_name: &str) -> Result<(), String> {
     if is_model_present(model_name) {
-        crate::emit_log(
+        emit_log(
             &handle,
-            crate::LogLevel::Success,
+            LogLevel::Success,
             "AI",
             &format!("Model {} is ready.", model_name),
             None,
@@ -588,9 +703,9 @@ pub async fn ensure_model_present(handle: AppHandle, model_name: &str) -> Result
         return Ok(());
     }
 
-    crate::emit_log(
+    emit_log(
         &handle,
-        crate::LogLevel::Warn,
+        LogLevel::Warn,
         "AI",
         &format!(
             "Model {} not found. Pulling now... (This may take a few minutes)",
@@ -605,9 +720,9 @@ pub async fn ensure_model_present(handle: AppHandle, model_name: &str) -> Result
         .map_err(|e| format!("Failed to initiate ollama pull: {}", e))?;
 
     if status.success() {
-        crate::emit_log(
+        emit_log(
             &handle,
-            crate::LogLevel::Success,
+            LogLevel::Success,
             "AI",
             &format!("Model {} pulled successfully.", model_name),
             None,
@@ -615,7 +730,7 @@ pub async fn ensure_model_present(handle: AppHandle, model_name: &str) -> Result
         Ok(())
     } else {
         let err = format!("Failed to pull {}. Ensure Ollama is running.", model_name);
-        crate::emit_log(&handle, crate::LogLevel::Error, "AI", &err, None);
+        emit_log(&handle, LogLevel::Error, "AI", &err, None);
         Err(err)
     }
 }

@@ -1,0 +1,32 @@
+    Checking tauri-appapex-security-auditor v0.1.0 (C:\dev\apexapi\src-tauri)
+error: this file contains an unclosed delimiter
+    --> src\detectors.rs:2862:3
+     |
+  44 | pub fn analyze(body: &str, status: u16, method: &str, headers: &str) -> Vec<Badge> {
+     |                                                                                    - unclosed delimiter
+...
+  57 |     {
+     |     - unclosed delimiter
+...
+  73 |     {
+     |     - unclosed delimiter
+...
+  90 |     {
+     |     - unclosed delimiter
+...
+ 107 |     {
+     |     - unclosed delimiter
+...
+ 121 |     {
+     |     - another 4 unclosed delimiters begin from here
+...
+ 182 |     if lower_body.contains("eyj0e") || lower_body.contains("eyJhbGciOiJub25lIn0") {
+     |                                                                                   - this delimiter might not be properly closed...
+...
+ 432 | }
+     | - ...as it matches this but it has different indentation
+...
+2862 | }
+     |  ^
+
+error: could not compile `tauri-appapex-security-auditor` (lib) due to 1 previous error

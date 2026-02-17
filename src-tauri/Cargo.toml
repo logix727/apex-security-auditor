@@ -28,6 +28,8 @@ rusqlite = { version = "0.33", features = ["bundled"] }
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 regex = "1"
+aes-gcm = "0.10.3"
+aead = "0.5.2"
 base64 = "0.22.1"
 chrono = "0.4"
 rand = "0.8"
@@ -36,4 +38,9 @@ jwt = "0.16.0"
 sha2 = "0.10.9"
 serde_yaml = "0.9"
 url = "2"
+uuid = { version = "1", features = ["v4"] }
+thiserror = "2.0.18"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+refinery = { version = "0.8", features = ["rusqlite"] }
 

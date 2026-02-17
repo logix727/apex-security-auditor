@@ -1,49 +1,64 @@
 use base64::{engine::general_purpose, Engine as _};
 use hmac::{Hmac, Mac};
 use jwt::SignWithKey;
-use serde::{Deserialize, Serialize};
+use serde_json;
 use sha2::Sha256;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JwtClaims {
-    pub key: String,
-    pub value: String,
-    pub is_sensitive: bool,
-}
-
 #[tauri::command]
-pub async fn decode_jwt(token: String) -> Result<Vec<JwtClaims>, String> {
+pub async fn decode_jwt(token: String) -> Result<serde_json::Value, String> {
     let parts: Vec<&str> = token.split('.').collect();
-    if parts.len() != 3 {
-        return Err("Invalid JWT format (expected 3 parts)".to_string());
+    if parts.len() < 2 {
+        return Err("Invalid JWT format (expected at least 2 parts)".to_string());
     }
 
+    // Decode Header
+    let header_b64 = parts[0];
+    let header_decoded = general_purpose::URL_SAFE_NO_PAD
+        .decode(header_b64)
+        .map_err(|e| format!("Header Base64 decode failed: {}", e))?;
+    let header_json: serde_json::Value =
+        serde_json::from_slice(&header_decoded).unwrap_or(serde_json::Value::Null);
+
+    // Decode Payload
     let payload_b64 = parts[1];
-    let decoded = general_purpose::STANDARD_NO_PAD
+    let payload_decoded = general_purpose::URL_SAFE_NO_PAD
         .decode(payload_b64)
-        .map_err(|e| format!("Base64 decode failed: {}", e))?;
+        .map_err(|e| format!("Payload Base64 decode failed: {}", e))?;
 
-    let json: serde_json::Value =
-        serde_json::from_slice(&decoded).map_err(|e| format!("JSON parse failed: {}", e))?;
+    let payload_json: serde_json::Value = serde_json::from_slice(&payload_decoded)
+        .map_err(|e| format!("JSON parse failed: {}", e))?;
 
-    let mut claims = Vec::new();
-    if let Some(obj) = json.as_object() {
-        for (k, v) in obj {
-            let k_lower = k.to_lowercase();
-            let is_sensitive = ["admin", "role", "su", "permissions", "scope", "email"]
-                .iter()
-                .any(|&s| k_lower.contains(s));
+    // Try to identify owner/type
+    let mut metadata = serde_json::Map::new();
+    if let Some(obj) = payload_json.as_object() {
+        if let Some(sub) = obj.get("sub") {
+            metadata.insert("owner".to_string(), sub.clone());
+        } else if let Some(email) = obj.get("email") {
+            metadata.insert("owner".to_string(), email.clone());
+        } else if let Some(upn) = obj.get("upn") {
+            metadata.insert("owner".to_string(), upn.clone());
+        }
 
-            claims.push(JwtClaims {
-                key: k.clone(),
-                value: v.to_string(),
-                is_sensitive,
-            });
+        if obj.contains_key("nonce") && obj.contains_key("at_hash") {
+            metadata.insert(
+                "type".to_string(),
+                serde_json::Value::String("OIDC ID Token".to_string()),
+            );
+        } else if obj.contains_key("scope") || obj.contains_key("scp") {
+            metadata.insert(
+                "type".to_string(),
+                serde_json::Value::String("Access Token".to_string()),
+            );
         }
     }
 
-    Ok(claims)
+    let mut result = serde_json::Map::new();
+    result.insert("header".to_string(), header_json);
+    result.insert("payload".to_string(), payload_json);
+    result.insert("metadata".to_string(), serde_json::Value::Object(metadata));
+
+    Ok(serde_json::Value::Object(result))
 }
 
 #[tauri::command]
