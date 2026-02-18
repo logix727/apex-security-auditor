@@ -14,6 +14,7 @@ pub trait DatabaseTrait: Send + Sync {
         depth: i32,
     ) -> Result<i64>;
     fn get_assets(&self) -> Result<Vec<Asset>>;
+    #[allow(clippy::too_many_arguments)]
     fn update_scan_result(
         &self,
         id: i64,
@@ -64,6 +65,7 @@ pub trait DatabaseTrait: Send + Sync {
         duration_ms: Option<i64>,
         error_message: Option<&str>,
     ) -> Result<()>;
+    #[allow(clippy::too_many_arguments)]
     fn record_import_asset(
         &self,
         import_id: &str,

@@ -45,7 +45,7 @@ pub fn detect_bola_patterns(url: &str, body: &str) -> Vec<BolaFinding> {
     let json_id_pattern = Regex::new(r#"(?i)["'](?:id|user_id|account_id|owner_id)["']\s*:\s*(?P<val>[0-9]{1,10}|["'][A-Za-z0-9-]{10,}["'])"#).unwrap();
     for cap in json_id_pattern.captures_iter(body) {
         if let Some(m) = cap.name("val") {
-            let val = m.as_str().replace('"', "").replace('\'', "");
+            let val = m.as_str().replace(['"', '\''], "");
             let is_numeric = val.chars().all(|c| c.is_ascii_digit());
 
             if is_numeric && val.len() < 8 {

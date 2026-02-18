@@ -121,6 +121,7 @@ impl SqliteDatabase {
         Ok(assets)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_scan_result(
         &self,
         id: i64,
@@ -208,16 +209,14 @@ impl SqliteDatabase {
         let url_iter = stmt.query_map([], |row| row.get::<_, String>(0))?;
 
         let mut domains = std::collections::HashSet::new();
-        for url_str in url_iter {
-            if let Ok(u) = url_str {
-                if let Ok(parsed) = url::Url::parse(&u) {
-                    if let Some(host) = parsed.host_str() {
-                        domains.insert(host.to_string());
-                    }
-                } else if u.contains('/') {
-                    let host = u.split('/').next().unwrap_or(&u);
+        for u in url_iter.flatten() {
+            if let Ok(parsed) = url::Url::parse(&u) {
+                if let Some(host) = parsed.host_str() {
                     domains.insert(host.to_string());
                 }
+            } else if u.contains('/') {
+                let host = u.split('/').next().unwrap_or(&u);
+                domains.insert(host.to_string());
             }
         }
         Ok(domains)
@@ -516,11 +515,7 @@ impl SqliteDatabase {
                 continue;
             }
 
-            let clean_url = url
-                .split(|c| c == ',' || c == ';' || c == '\t' || c == ' ')
-                .next()
-                .unwrap_or("")
-                .trim();
+            let clean_url = url.split([',', ';', '\t', ' ']).next().unwrap_or("").trim();
 
             if clean_url != url && !clean_url.is_empty() {
                 conn.execute("UPDATE assets SET url = ?1 WHERE id = ?2", (clean_url, id))?;

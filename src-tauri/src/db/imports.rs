@@ -9,7 +9,7 @@ impl SqliteDatabase {
             .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
 
         let options_json = serde_json::to_string(&operation.options)
-            .map_err(|e| crate::error::Error::Serialization(e))?;
+            .map_err(crate::error::Error::Serialization)?;
 
         conn.execute(
             "INSERT INTO import_operations (import_id, source, total_assets, successful_assets, failed_assets, duplicate_assets, status, options) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -75,6 +75,7 @@ impl SqliteDatabase {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn record_import_asset(
         &self,
         import_id: &str,

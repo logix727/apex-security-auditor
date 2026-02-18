@@ -250,7 +250,7 @@ pub async fn fetch_wayback_urls(domain: String) -> Result<Vec<DiscoveredAsset>, 
     let urls = entries
         .into_iter()
         .skip(1)
-        .filter_map(|row| row.get(0).cloned());
+        .filter_map(|row| row.first().cloned());
 
     let mut assets = Vec::new();
     for (i, url) in urls.enumerate() {

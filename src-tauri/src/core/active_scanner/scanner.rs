@@ -59,7 +59,7 @@ pub async fn scan_active_target(
             {
                 Ok(resp) => {
                     let status = resp.status().as_u16();
-                    if status >= 200 && status < 300 {
+                    if (200..300).contains(&status) {
                         result.bola_findings.push(BolaFinding {
                             original_url: url.clone(),
                             tested_url: variant.clone(),
@@ -92,25 +92,22 @@ pub async fn scan_active_target(
                     parsed.query_pairs_mut().clear().extend_pairs(pairs);
                     let target_url = parsed.to_string();
 
-                    match client
+                    if let Ok(resp) = client
                         .request(req_method.clone(), &target_url)
                         .headers(header_map.clone())
                         .send()
                         .await
                     {
-                        Ok(resp) => {
-                            if let Ok(text) = resp.text().await {
-                                if let Some(db_error) = check_sqli_response(&text) {
-                                    result.sqli_findings.push(SqliFinding {
-                                        parameter: "query_param".to_string(),
-                                        payload: payload.clone(),
-                                        evidence: db_error,
-                                        severity: "High".to_string(),
-                                    });
-                                }
+                        if let Ok(text) = resp.text().await {
+                            if let Some(db_error) = check_sqli_response(&text) {
+                                result.sqli_findings.push(SqliFinding {
+                                    parameter: "query_param".to_string(),
+                                    payload: payload.clone(),
+                                    evidence: db_error,
+                                    severity: "High".to_string(),
+                                });
                             }
                         }
-                        Err(_) => {}
                     }
                 }
             }

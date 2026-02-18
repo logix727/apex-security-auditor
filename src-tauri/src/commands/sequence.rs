@@ -12,6 +12,7 @@ pub async fn start_sequence(
         .map_err(|e| e.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn add_to_sequence(
     db: State<'_, SqliteDatabase>,

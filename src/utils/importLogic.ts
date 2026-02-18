@@ -1,12 +1,12 @@
 import { ImportDestination, ImportOptions } from '../types';
 
-export const determineGlobalSource = (destination: ImportDestination): string => {
+export const determineGlobalSource = (_destination: ImportDestination): string => {
   // Use 'Import' as the fallback even if going to workbench.
   // The 'is_workbench' flag handles the destination logic, the source should reflect origin.
   return 'Import';
 };
 
-export const prepareAssetsForImport = (assets: any[], destination: ImportDestination) => {
+export const prepareAssetsForImport = (assets: any[], _destination: ImportDestination) => {
   return assets.map(a => ({
     ...a,
     // Preserve existing source, fallback to 'Import' (not 'Workbench')

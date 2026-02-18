@@ -38,20 +38,20 @@ impl ImportService {
             // Only skip duplicates if NOT importing to Workbench.
             // Workbench imports need to pass through so is_workbench gets set on existing assets.
             let is_workbench_dest = options.destination == "workbench";
-            if options.skip_duplicates && !is_workbench_dest {
-                if self
+            if options.skip_duplicates
+                && !is_workbench_dest
+                && self
                     .db
                     .asset_exists_by_url_method(&asset.url, &asset.method)
-                {
-                    emit_log(
-                        &app,
-                        LogLevel::Warn,
-                        "backend:import",
-                        &format!("Skipping duplicate asset: {}", asset.url),
-                        None,
-                    );
-                    continue;
-                }
+            {
+                emit_log(
+                    &app,
+                    LogLevel::Warn,
+                    "backend:import",
+                    &format!("Skipping duplicate asset: {}", asset.url),
+                    None,
+                );
+                continue;
             }
 
             emit_log(
@@ -63,10 +63,11 @@ impl ImportService {
             );
             // Initial simple normalization
             let mut normalized_url = asset.url.trim().to_string();
-            if !normalized_url.starts_with("http://") && !normalized_url.starts_with("https://") {
-                if normalized_url.contains('.') {
-                    normalized_url = format!("https://{}", normalized_url);
-                }
+            if !normalized_url.starts_with("http://")
+                && !normalized_url.starts_with("https://")
+                && normalized_url.contains('.')
+            {
+                normalized_url = format!("https://{}", normalized_url);
             }
 
             let normalized = match crate::utils::url_utils::normalize_url(&normalized_url) {
@@ -239,10 +240,8 @@ impl ImportService {
             let domain = cap.as_str().trim();
 
             let has_letters = domain.chars().any(|c| c.is_alphabetic());
-            if !has_letters {
-                if domain.matches('.').count() < 3 {
-                    continue;
-                }
+            if !has_letters && domain.matches('.').count() < 3 {
+                continue;
             }
 
             if domain.starts_with("http://") || domain.starts_with("https://") {

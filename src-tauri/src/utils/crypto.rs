@@ -14,6 +14,12 @@ pub struct CryptoManager {
     legacy_key: Key<Aes256Gcm>,
 }
 
+impl Default for CryptoManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CryptoManager {
     pub fn new() -> Self {
         // 1. Setup Legacy Key (for migration/fallback)

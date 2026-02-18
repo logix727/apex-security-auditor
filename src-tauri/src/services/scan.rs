@@ -92,7 +92,7 @@ impl ScanService {
         ScanResult {
             status: final_status.to_string(),
             status_code: u16_status as i32,
-            risk_score: risk_score as i32,
+            risk_score,
             findings: badges,
             response_headers,
             response_body,

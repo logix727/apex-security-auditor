@@ -36,22 +36,22 @@ pub fn analyze_with_offsets(
     let lower_body = body.to_lowercase();
 
     // Potential race condition detection
-    if (method == "POST" || method == "PUT" || method == "DELETE") && status == 200 {
-        if lower_body.contains("status")
+    if (method == "POST" || method == "PUT" || method == "DELETE")
+        && status == 200
+        && (lower_body.contains("status")
             || lower_body.contains("state")
             || lower_body.contains("updated")
-            || lower_body.contains("success")
-        {
-            if let Some((start, end)) = find_case_insensitive(body, "status") {
-                findings.push(Finding::from_parts(
-                    "🏁",
-                    "Race",
-                    Severity::Info,
-                    "This endpoint returns state/status. If it's part of a multi-step flow, check for race conditions.",
-                    start,
-                    end,
-                ).with_owasp("API6:2023 Unrestricted Access to Sensitive Business Flows"));
-            }
+            || lower_body.contains("success"))
+    {
+        if let Some((start, end)) = find_case_insensitive(body, "status") {
+            findings.push(Finding::from_parts(
+                "🏁",
+                "Race",
+                Severity::Info,
+                "This endpoint returns state/status. If it's part of a multi-step flow, check for race conditions.",
+                start,
+                end,
+            ).with_owasp("API6:2023 Unrestricted Access to Sensitive Business Flows"));
         }
     }
 
@@ -81,9 +81,7 @@ pub fn classify_vulnerability(finding: &str) -> Option<Badge> {
 /// Helper function to find case-insensitive substring and return its position
 fn find_case_insensitive(haystack: &str, needle: &str) -> Option<(usize, usize)> {
     let lower_haystack = haystack.to_lowercase();
-    if let Some(pos) = lower_haystack.find(&needle.to_lowercase()) {
-        Some((pos, pos + needle.len()))
-    } else {
-        None
-    }
+    lower_haystack
+        .find(&needle.to_lowercase())
+        .map(|pos| (pos, pos + needle.len()))
 }

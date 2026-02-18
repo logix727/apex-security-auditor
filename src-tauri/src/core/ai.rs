@@ -6,19 +6,14 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ProviderType {
+    #[default]
     Local,
     // Deprecated but kept for config compat
     OpenAI,
     Anthropic,
-}
-
-impl Default for ProviderType {
-    fn default() -> Self {
-        ProviderType::Local
-    }
 }
 
 impl std::fmt::Display for ProviderType {
@@ -72,7 +67,7 @@ fn get_config_path() -> PathBuf {
 
 impl LlmConfig {
     pub fn from_env() -> Self {
-        let provider_str = env::var("APEX_LLM_PROVIDER").unwrap_or_else(|_| "local".to_string());
+        let provider_str = env::var("APEX_LLM_PROVIDER").unwrap_or("local".to_string());
 
         let provider_type: ProviderType = provider_str.parse().unwrap_or_default();
 
@@ -89,9 +84,9 @@ impl LlmConfig {
         };
 
         Self {
-            endpoint: env::var("APEX_LLM_ENDPOINT").unwrap_or_else(|_| default_endpoint),
+            endpoint: env::var("APEX_LLM_ENDPOINT").unwrap_or(default_endpoint),
             api_key: env::var("APEX_LLM_API_KEY").unwrap_or_default(),
-            model: env::var("APEX_LLM_MODEL").unwrap_or_else(|_| default_model),
+            model: env::var("APEX_LLM_MODEL").unwrap_or(default_model),
             provider_type,
         }
     }
@@ -112,9 +107,9 @@ impl LlmConfig {
                     // If decryption fails, use as is (plaintext migration)
 
                     return Self {
-                        endpoint: env::var("APEX_LLM_ENDPOINT").unwrap_or_else(|_| config.endpoint),
-                        api_key: env::var("APEX_LLM_API_KEY").unwrap_or_else(|_| config.api_key),
-                        model: env::var("APEX_LLM_MODEL").unwrap_or_else(|_| config.model),
+                        endpoint: env::var("APEX_LLM_ENDPOINT").unwrap_or(config.endpoint),
+                        api_key: env::var("APEX_LLM_API_KEY").unwrap_or(config.api_key),
+                        model: env::var("APEX_LLM_MODEL").unwrap_or(config.model),
                         provider_type: env::var("APEX_LLM_PROVIDER")
                             .ok()
                             .and_then(|p| p.parse().ok())
@@ -883,9 +878,7 @@ pub fn update_llm_config(
 }
 
 pub fn is_model_present(model_name: &str) -> bool {
-    let output = std::process::Command::new("ollama")
-        .args(&["list"])
-        .output();
+    let output = std::process::Command::new("ollama").args(["list"]).output();
 
     if let Ok(output) = output {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -919,7 +912,7 @@ pub async fn ensure_model_present(handle: AppHandle, model_name: &str) -> Result
     );
 
     let status = std::process::Command::new("ollama")
-        .args(&["pull", model_name])
+        .args(["pull", model_name])
         .status()
         .map_err(|e| format!("Failed to initiate ollama pull: {}", e))?;
 

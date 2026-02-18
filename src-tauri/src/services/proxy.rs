@@ -23,6 +23,12 @@ pub struct ProxyService {
     pub pending_requests: Arc<TokioMutex<HashMap<String, oneshot::Sender<InterceptAction>>>>,
 }
 
+impl Default for ProxyService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProxyService {
     pub fn new() -> Self {
         Self {

@@ -38,7 +38,7 @@ pub async fn generate_audit_report(
                         finding.short, finding.description
                     ));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
 
             if !asset.notes.is_empty() {
