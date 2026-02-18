@@ -108,7 +108,11 @@ pub async fn clear_documentation_status(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn import_missing_endpoints(app: AppHandle, content: String) -> Result<usize, String> {
+pub async fn import_missing_endpoints(
+    app: AppHandle,
+    content: String,
+    base_url_override: Option<String>,
+) -> Result<usize, String> {
     let spec = parse_openapi_spec(content)?;
     let spec_path_map = spec.get_paths();
     let db = app.state::<SqliteDatabase>();
@@ -124,13 +128,33 @@ pub async fn import_missing_endpoints(app: AppHandle, content: String) -> Result
     }
 
     let mut imported_count = 0;
+
+    // Determine base URL once
+    let base_url = if let Some(override_url) = base_url_override {
+        override_url
+    } else if let Some(servers) = &spec.servers {
+        if let Some(first_server) = servers.first() {
+            first_server.url.clone()
+        } else {
+            "http://localhost:3000".to_string()
+        }
+    } else {
+        "http://localhost:3000".to_string()
+    };
+
     for (path, methods) in spec_path_map {
         for method in methods {
             if !existing_urls_methods.contains(&(path.clone(), method.clone())) {
-                // Construct a placeholder URL if no base URL is available
-                // In a real app, we might want the user to provide a base URL
-                let url = format!("http://api.local{}", path);
-                let _ = db.add_asset(&url, "Import", Some(&method), false);
+                // Ensure base doesn't end with slash if path starts with one, or handle cleaner joining
+                let url = if base_url.ends_with('/') && path.starts_with('/') {
+                    format!("{}{}", &base_url[..base_url.len() - 1], path)
+                } else if !base_url.ends_with('/') && !path.starts_with('/') {
+                    format!("{}/{}", base_url, path)
+                } else {
+                    format!("{}{}", base_url, path)
+                };
+
+                let _ = db.add_asset(&url, "Import", Some(&method), false, false, 0);
                 // We might need to update the method since add_asset defaults to GET or uses it as a string
                 // Let's check db.rs again if we can specify method in add_asset
                 imported_count += 1;

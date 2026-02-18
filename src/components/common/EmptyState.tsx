@@ -1,8 +1,8 @@
 import React from 'react';
-import { LucideIcon } from 'lucide-react';
+import { LucideIcon, Search, FolderOpen, FileX, AlertTriangle, Inbox, Plus, Upload } from 'lucide-react';
 
 interface EmptyStateProps {
-    icon: LucideIcon;
+    icon?: LucideIcon;
     title: string;
     description: string;
     action?: {
@@ -10,11 +10,61 @@ interface EmptyStateProps {
         onClick: () => void;
         icon?: LucideIcon;
     };
+    /** ARIA role for the component */
+    role?: string;
+    /** Test ID for testing */
+    testId?: string;
 }
 
-export const EmptyState: React.FC<EmptyStateProps> = ({ icon: Icon, title, description, action }) => {
+/**
+ * Predefined empty state variants for common use cases
+ */
+export const EmptyStateVariants = {
+    NoAssets: {
+        icon: Inbox,
+        title: 'No Assets Found',
+        description: 'Get started by importing your first assets or adjusting your filters.'
+    },
+    NoSearchResults: {
+        icon: Search,
+        title: 'No Results Found',
+        description: 'Try adjusting your search terms or filters to find what you\'re looking for.'
+    },
+    NoFolder: {
+        icon: FolderOpen,
+        title: 'Empty Folder',
+        description: 'This folder doesn\'t contain any assets yet.'
+    },
+    NoSelection: {
+        icon: FileX,
+        title: 'Nothing Selected',
+        description: 'Select one or more assets to perform actions on them.'
+    },
+    Error: {
+        icon: AlertTriangle,
+        title: 'Something Went Wrong',
+        description: 'An error occurred while loading this content. Please try again.'
+    },
+    Import: {
+        icon: Upload,
+        title: 'Drop Files to Import',
+        description: 'Drag and drop files here or click to browse.'
+    },
+    CreateFirst: {
+        icon: Plus,
+        title: 'Get Started',
+        description: 'Create your first item to see it here.'
+    }
+} as const;
+
+export const EmptyState: React.FC<EmptyStateProps> = ({ icon: Icon, title, description, action, role = 'status', testId }) => {
     return (
-        <div style={{
+        <div 
+            role={role}
+            aria-live="polite"
+            aria-label={title}
+            data-testid={testId}
+            style={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
@@ -26,19 +76,23 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ icon: Icon, title, descr
             borderRadius: '16px',
             margin: '20px'
         }}>
-            <div style={{
-                width: '64px',
-                height: '64px',
-                borderRadius: '16px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '20px',
-                color: 'var(--accent-color)',
-                border: '1px solid rgba(99, 102, 241, 0.2)'
-            }}>
-                <Icon size={32} />
+            <div 
+                role="img" 
+                aria-hidden="true"
+                style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '16px',
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '20px',
+                    color: 'var(--accent-color)',
+                    border: '1px solid rgba(99, 102, 241, 0.2)'
+                }}
+            >
+                {Icon && <Icon size={32} />}
             </div>
             <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-primary)' }}>{title}</h3>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '300px', lineHeight: '1.6', marginBottom: '24px' }}>
@@ -47,6 +101,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ icon: Icon, title, descr
             {action && (
                 <button
                     onClick={action.onClick}
+                    aria-label={action.label}
                     style={{
                         padding: '10px 24px',
                         background: 'var(--accent-color)',

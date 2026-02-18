@@ -10,6 +10,8 @@ pub trait DatabaseTrait: Send + Sync {
         source: &str,
         method: Option<&str>,
         recursive: bool,
+        is_workbench: bool,
+        depth: i32,
     ) -> Result<i64>;
     fn get_assets(&self) -> Result<Vec<Asset>>;
     fn update_scan_result(
@@ -27,6 +29,7 @@ pub trait DatabaseTrait: Send + Sync {
     fn delete_asset(&self, id: i64) -> Result<()>;
     fn get_asset_history(&self, asset_id: i64) -> Result<Vec<ScanHistoryEntry>>;
     fn get_authorized_domains(&self) -> Result<HashSet<String>>;
+    fn add_authorized_domain(&self, domain: &str) -> Result<()>;
     fn update_asset_triage(&self, id: i64, triage_status: &str, notes: &str) -> Result<()>;
     fn update_finding_fp(
         &self,
@@ -43,6 +46,7 @@ pub trait DatabaseTrait: Send + Sync {
     fn purge_recursive_assets(&self) -> Result<usize>;
     fn sanitize_urls(&self) -> Result<usize>;
     fn update_asset_documentation(&self, id: i64, is_documented: bool) -> Result<()>;
+    fn update_asset_workbench_status(&self, id: i64, is_workbench: bool) -> Result<()>;
     fn batch_mark_shadow_apis(&self, asset_ids: &[i64]) -> Result<usize>;
 
     // Folders
@@ -77,9 +81,9 @@ pub trait DatabaseTrait: Send + Sync {
 
     // Sequences
     fn create_sequence(&self, name: &str, context_summary: Option<String>) -> Result<String>;
-    fn add_step_to_sequence(&self, step: &crate::data::SequenceStep) -> Result<()>;
-    fn get_sequence(&self, id: &str) -> Result<crate::data::RequestSequence>;
-    fn list_sequences(&self) -> Result<Vec<crate::data::RequestSequence>>;
+    fn add_step_to_sequence(&self, step: &crate::core::data::SequenceStep) -> Result<()>;
+    fn get_sequence(&self, id: &str) -> Result<crate::core::data::RequestSequence>;
+    fn list_sequences(&self) -> Result<Vec<crate::core::data::RequestSequence>>;
 
     // Settings
     fn get_setting(&self, key: &str) -> Result<Option<String>>;

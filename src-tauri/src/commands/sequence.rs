@@ -1,4 +1,4 @@
-use crate::data::{RequestSequence, SequenceStep};
+use crate::core::data::{RequestSequence, SequenceStep};
 use crate::db::SqliteDatabase;
 use tauri::State;
 
@@ -24,7 +24,7 @@ pub async fn add_to_sequence(
     response_body: Option<String>,
     request_headers: Option<String>,
     response_headers: Option<String>,
-    captures: Vec<crate::data::VariableCapture>,
+    captures: Vec<crate::core::data::VariableCapture>,
 ) -> Result<(), String> {
     let step = SequenceStep {
         id: 0, // Auto-incremented
@@ -122,4 +122,13 @@ pub async fn execute_sequence_step(
         "updated_context": updated_context,
         "final_url": final_url
     }))
+}
+
+#[tauri::command]
+pub async fn delete_sequence_step(
+    db: State<'_, SqliteDatabase>,
+    step_id: i64,
+) -> Result<(), String> {
+    db.delete_step_from_sequence(step_id)
+        .map_err(|e| e.to_string())
 }

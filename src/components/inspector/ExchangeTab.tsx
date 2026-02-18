@@ -2,9 +2,9 @@ import React from 'react';
 import { Copy, Activity, Search, EyeOff, Eye, Terminal, Shield, Info } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { Asset, Badge } from '../../types';
-import { JSONTree } from '../JSONTree';
-import { HeaderView } from '../HeaderView';
-import { maskPII } from '../PIIMasker';
+import { JSONTree } from '../common/JSONTree';
+import { HeaderView } from '../layout/HeaderView';
+import { maskPII } from '../common/PIIMasker';
 
 interface ExchangeTabProps {
     inspectorAsset: Asset;

@@ -10,15 +10,15 @@ import { WorkbenchView } from './workbench/WorkbenchView';
 import { AssetsView } from './assets/AssetsView';
 import { SurfaceView } from './surface/SurfaceView';
 import { DiscoveryView } from './discovery/DiscoveryView';
-import { Settings } from './Settings';
-import { Inspector } from './Inspector';
-import { ImportManager } from './ImportManager';
+import { Settings } from './settings/Settings';
+import { Inspector } from './inspector/Inspector';
+import { ImportManager } from './import/ImportManager';
 import { InterceptView } from './proxy/InterceptView';
 import { SequenceEditor } from './sequence/SequenceEditor';
 import { SmartFilterCommandBar } from './summary/SmartFilterCommandBar';
 import { SequenceAnalysisModal } from './modals/SequenceAnalysisModal';
 import { ShadowApiReport } from './assets/ShadowApiReport';
-import { DebugConsole, useDebugLogger } from './DebugConsole';
+import { DebugConsole, useDebugLogger } from './debug/DebugConsole';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { 
@@ -49,10 +49,11 @@ export const AppContent: React.FC = () => {
         setSelectedTreePath,
         workbenchIds, setWorkbenchIds,
         handleAssetMouseDown, handleContextMenu,
-        workbenchFilterAdapter,
         filterMethod, setFilterMethod,
         filterStatus, setFilterStatus,
+        filterSource, setFilterSource,
         searchTerm, setSearchTerm,
+        visibleColumns, setVisibleColumns,
         filteredAssets, handleSort, sortConfig,
         bodySearchTerm, setBodySearchTerm
     } = useApp();
@@ -162,9 +163,9 @@ export const AppContent: React.FC = () => {
         if (ids.length === 0) return;
         
         for (const assetId of ids) {
-            await invoke('update_asset_source', { id: assetId, source: 'Workbench' });
+            await invoke('update_asset_workbench_status', { id: assetId, is_workbench: true });
         }
-        setAssets((prev: Asset[]) => prev.map((a: Asset) => ids.includes(a.id) ? { ...a, source: 'Workbench' } : a));
+        setAssets((prev: Asset[]) => prev.map((a: Asset) => ids.includes(a.id) ? { ...a, is_workbench: true } : a));
         setWorkbenchIds((prev: Set<number>) => {
             const next = new Set(prev);
             ids.forEach(i => next.add(i));
@@ -178,9 +179,9 @@ export const AppContent: React.FC = () => {
         if (ids.length === 0) return;
         
         for (const assetId of ids) {
-            await invoke('update_asset_source', { id: assetId, source: 'User' });
+            await invoke('update_asset_workbench_status', { id: assetId, is_workbench: false });
         }
-        setAssets((prev: Asset[]) => prev.map((a: Asset) => ids.includes(a.id) ? { ...a, source: 'User' } : a));
+        setAssets((prev: Asset[]) => prev.map((a: Asset) => ids.includes(a.id) ? { ...a, is_workbench: false } : a));
         setWorkbenchIds((prev: Set<number>) => {
             const next = new Set(prev);
             ids.forEach(i => next.delete(i));
@@ -198,6 +199,52 @@ export const AppContent: React.FC = () => {
                 success('scanner', `Successfully initiated rescan for asset ${rescanId}`);
             } catch (e) {
                 error('scanner', `Failed to rescan asset ${rescanId}: ${e}`);
+            }
+        }
+    };
+
+    const handleActiveScan = async (id?: number) => {
+        const ids = id ? [id] : Array.from(selectedIds);
+        if (ids.length === 0) return;
+
+        if (!confirm(`CAUTION: You are about to run ACTIVE INTRUSIVE SCANS on ${ids.length} assets.\n\nThis will inject payloads (e.g., SQLi, BOLA probes) that may modify data or trigger alarms.\n\nDo you have authorization to scan these targets?`)) return;
+
+        info('scanner', `Starting active scan on ${ids.length} assets...`);
+        let successCount = 0;
+        
+        for (const assetId of ids) {
+             try {
+                 const result = await invoke<any>('execute_active_scan', { id: assetId });
+                 console.log('Active Scan Result:', result);
+                 successCount++;
+             } catch (e) {
+                 error('scanner', `Active scan failed for asset ${assetId}: ${e}`);
+             }
+        }
+        
+        if (successCount > 0) {
+            success('scanner', `Active scan completed for ${successCount} assets.`);
+        }
+    };
+
+    const handleDeleteAsset = async (id?: number) => {
+        const ids = id ? [id] : Array.from(selectedIds);
+        if (ids.length === 0) return;
+        
+        if (confirm(`Permanently delete ${ids.length} asset(s)?`)) {
+            try {
+                for (const assetId of ids) {
+                    await invoke('delete_asset', { id: assetId });
+                }
+                setAssets(prev => prev.filter(a => !ids.includes(a.id)));
+                setSelectedIds(next => {
+                    const newSet = new Set(next);
+                    ids.forEach(id => newSet.delete(id));
+                    return newSet;
+                });
+                success('db', `Deleted ${ids.length} asset(s)`);
+            } catch (e) {
+                error('db', `Failed to delete assets: ${e}`);
             }
         }
     };
@@ -233,14 +280,14 @@ export const AppContent: React.FC = () => {
     };
 
     const handleImport = async (assetsToImport: any[], destination: ImportDestination, options: ImportOptions) => {
-          const globalSource = destination === 'workbench' ? 'Workbench' : 'Import';
+          const globalSource = options.source || (destination === 'workbench' ? 'Workbench' : 'Import');
           if (assetsToImport.length === 0) {
               info('import', "No assets were selected for import.");
               return;
           }
     
           const batchSize = options.batchMode ? (options.batchSize || 5) : assetsToImport.length;
-          const rateLimitMs = options.batchMode ? (options.rateLimitMs || 100) : 0;
+          const rateLimit = options.batchMode ? (options.rateLimit || 100) : 0;
           const totalAssets = assetsToImport.length;
           
           info('import', `Starting structured import of ${totalAssets} assets to ${destination}.`);
@@ -255,8 +302,8 @@ export const AppContent: React.FC = () => {
                   source: globalSource
                 });
                 allNewIds = [...allNewIds, ...newIds];
-                if (i + batchSize < totalAssets && rateLimitMs > 0) {
-                    await new Promise(resolve => setTimeout(resolve, rateLimitMs));
+                if (i + batchSize < totalAssets && rateLimit > 0) {
+                    await new Promise(resolve => setTimeout(resolve, rateLimit));
                 }
             }
             
@@ -414,8 +461,7 @@ export const AppContent: React.FC = () => {
                     selectedIds={selectedIds}
                     handleAssetMouseDown={handleAssetMouseDown}
                     handleContextMenu={handleContextMenu}
-                    workbenchSort={{ sortConfig, handleSort }}
-                    workbenchFilter={workbenchFilterAdapter}
+                    workbenchSort={{ sortConfig, handleSort, sortData: (d: any) => d }}
                     onPromoteToAssetManager={handlePromoteToAssetManager}
                     onExportMarkdown={() => handleExport('markdown')}
                     onExportCsv={() => handleExport('csv')}
@@ -425,6 +471,8 @@ export const AppContent: React.FC = () => {
                     setSmartFilter={setSmartFilter}
                     proxyRunning={proxyRunning}
                     onToggleProxy={handleToggleProxy}
+                    onOpenImport={() => setIsImportManagerOpen(true)}
+                    onRunActiveScan={handleActiveScan}
                 />;
             case 'assets':
                 return <AssetsView 
@@ -437,7 +485,6 @@ export const AppContent: React.FC = () => {
                     selectedIds={selectedIds}
                     setSelectedIds={setSelectedIds}
                     onMouseDown={handleAssetMouseDown}
-                    onContextMenu={handleContextMenu}
                     onSort={handleSort}
                     sortConfig={sortConfig}
                     selectedTreePath={null}
@@ -446,6 +493,8 @@ export const AppContent: React.FC = () => {
                     setFilterMethod={setFilterMethod}
                     filterStatus={filterStatus}
                     setFilterStatus={setFilterStatus}
+                    filterSource={filterSource}
+                    setFilterSource={setFilterSource}
                     smartFilter={smartFilter}
                     setSmartFilter={setSmartFilter}
                     domainTree={domainTree}
@@ -454,12 +503,14 @@ export const AppContent: React.FC = () => {
                     onPurge={handlePurgeRecursive}
                     onAddToWorkbench={handleAddToWorkbench}
                     onOpenImport={() => setIsImportManagerOpen(true)}
+                    onRunActiveScan={handleActiveScan}
+                    onDeleteAsset={handleDeleteAsset}
                     onAnalyzeFlow={handleAnalyzeFlow}
                     getStatusBadge={getStatusBadge}
                     getDetectionBadges={getDetectionBadges}
                     getSourceIcon={getSourceIcon}
-                    visibleColumns={new Set(['url', 'method', 'status', 'detections', 'source'])}
-                    setVisibleColumns={() => {}} 
+                    visibleColumns={visibleColumns}
+                    setVisibleColumns={setVisibleColumns} 
                 />;
             case 'surface':
                 return <SurfaceView assets={assets} />;

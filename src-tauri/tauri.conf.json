@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.mvsto.tauri-appapex-security-auditor",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "cmd /c npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "tauri-appapex-security-auditor",
         "width": 1280,
         "height": 800,
@@ -23,6 +24,7 @@
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: http:;"
     }
   },
+
   "bundle": {
     "active": true,
     "targets": "all",

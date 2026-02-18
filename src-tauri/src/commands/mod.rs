@@ -1,10 +1,13 @@
+pub mod active_scan;
 pub mod assets;
 pub mod crypto;
 pub mod debug;
+pub mod diff;
 pub mod discovery;
 pub mod export;
 pub mod folders;
 pub mod proxy;
+pub mod repeater;
 pub mod scan;
 pub mod sequence;
 pub mod settings;

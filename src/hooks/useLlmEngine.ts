@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useDebugLogger } from '../components/DebugConsole';
+import { useDebugLogger } from '../components/debug/DebugConsole';
 
 export function useLlmEngine() {
     const { success, error, info } = useDebugLogger();

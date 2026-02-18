@@ -1,0 +1,17 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.54s
+     Running unittests src\lib.rs (target\debug\deps\tauri_appapex_security_auditor_lib-e99ed0e5c8514a32.exe)
+
+running 1 test
+Extracted basic URLs: ["https://example.com/api/v1", "http://test.local/foo", "https://test.local/foo"]
+Extracted domain URLs: ["https://api.google.com", "https://mysite.org/path"]
+Extracted versions: []
+test commands::assets::tests::test_ensure_import_logic_works ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 45 filtered out; finished in 0.02s
+
+     Running unittests src\main.rs (target\debug\deps\tauri_appapex_security_auditor-744d8c6e00674d84.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,24 +1,24 @@
 import React from 'react';
 import { X, AlertCircle } from 'lucide-react';
 import { SmartTable, Column } from '../table/SmartTable';
-import { ImportAsset, ImportOptions } from '../../types';
+import { ImportAsset } from '../../types';
 
 interface StagedAssetsTableProps {
   assets: ImportAsset[];
-  options: ImportOptions;
   onToggleSelection: (id: string) => void;
   onToggleRecursive: (id: string) => void;
   onRemove: (id: string) => void;
   onToggleAll: (selected: boolean) => void;
+  onRowMouseDown?: (id: string, e: React.MouseEvent) => void;
 }
 
 export const StagedAssetsTable: React.FC<StagedAssetsTableProps> = ({
   assets,
-  options,
   onToggleSelection,
   onToggleRecursive,
   onRemove,
-  onToggleAll
+  onToggleAll,
+  onRowMouseDown
 }) => {
   const getStatusColor = (status?: string): string => {
     switch (status) {
@@ -36,13 +36,16 @@ export const StagedAssetsTable: React.FC<StagedAssetsTableProps> = ({
     return stripped.substring(0, maxLength) + '...';
   };
 
-  const columns: Column<ImportAsset>[] = [
+  const columns: Column<ImportAsset>[] = React.useMemo(() => [
     {
       id: 'selected',
       label: (
         <input 
           type="checkbox" 
           onChange={(e) => onToggleAll(e.target.checked)}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
           checked={assets.length > 0 && assets.every(a => a.selected)}
           style={{ cursor: 'pointer' }}
         />
@@ -53,6 +56,9 @@ export const StagedAssetsTable: React.FC<StagedAssetsTableProps> = ({
           type="checkbox"
           checked={item.selected}
           onChange={() => onToggleSelection(item.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
           style={{ cursor: 'pointer' }}
         />
       )
@@ -64,14 +70,10 @@ export const StagedAssetsTable: React.FC<StagedAssetsTableProps> = ({
       render: (item: ImportAsset) => (
         <input
           type="checkbox"
-          checked={options.destination === 'asset_manager' ? true : item.recursive}
+          checked={item.recursive}
           onChange={() => onToggleRecursive(item.id)}
-          disabled={options.destination === 'asset_manager'}
-          title={options.destination === 'asset_manager' ? "Mandatory for Asset Manager" : "Recursive Discovery"}
-          style={{ 
-            cursor: options.destination === 'asset_manager' ? 'not-allowed' : 'pointer', 
-            opacity: options.destination === 'asset_manager' ? 0.7 : 1 
-          }}
+          title="Recursive Discovery"
+          style={{ cursor: 'pointer' }}
         />
       )
     },
@@ -106,7 +108,6 @@ export const StagedAssetsTable: React.FC<StagedAssetsTableProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <span title={item.url} style={{
             color: item.status === 'duplicate' ? 'var(--text-secondary)' : 'var(--text-primary)',
-            opacity: item.status === 'duplicate' ? 0.6 : 1,
             textDecoration: item.status === 'duplicate' ? 'line-through' : 'none',
             fontFamily: 'monospace', fontSize: '11px', wordBreak: 'break-all'
           }}>
@@ -148,7 +149,7 @@ export const StagedAssetsTable: React.FC<StagedAssetsTableProps> = ({
         </button>
       )
     }
-  ];
+  ], [assets, onToggleSelection, onToggleRecursive, onRemove, onToggleAll]);
 
   if (assets.length === 0) {
     return (
@@ -170,6 +171,7 @@ export const StagedAssetsTable: React.FC<StagedAssetsTableProps> = ({
         <SmartTable
           data={assets}
           columns={columns}
+          onRowMouseDown={(item, e) => onRowMouseDown?.(item.id, e)}
           headerStyle={{ background: 'var(--bg-sidebar)', padding: '12px' }}
         />
       </div>

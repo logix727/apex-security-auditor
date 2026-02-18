@@ -9,6 +9,12 @@ export interface Badge {
   end?: number;
   is_fp?: boolean;
   fp_reason?: string;
+  cvss_score?: number;
+  cvss_vector?: string;
+  secret_type?: string;
+  request_header_name?: string;
+  parameter?: string;
+  key?: string;
 }
 
 export interface Asset {
@@ -30,6 +36,9 @@ export interface Asset {
   triage_status: string;
   is_documented: boolean;
   source: string;
+  recursive: boolean;
+  is_workbench: boolean;
+  depth: number;
 }
 
 export interface Folder {
@@ -96,6 +105,7 @@ export interface ImportAsset {
   source: string;
   selected: boolean;
   recursive: boolean;
+  is_workbench?: boolean;
   status?: 'valid' | 'invalid' | 'duplicate' | 'pending';
   error?: string;
   assetId?: number;
@@ -106,9 +116,10 @@ export interface ImportOptions {
   recursive: boolean;
   batchMode: boolean;
   batchSize: number;
-  rateLimitMs: number;
+  rateLimit: number;
   skipDuplicates: boolean;
   validateUrls: boolean;
+  autoTriage: boolean;
   source?: string;
 }
 

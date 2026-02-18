@@ -11,8 +11,10 @@ interface AssetTableProps {
   sortConfig: SortConfig | null;
   getStatusBadge: (code: number, findings: Badge[]) => React.ReactNode;
   getDetectionBadges: (findings: Badge[]) => React.ReactNode;
-  getSourceIcon: (source: string) => React.ReactNode;
+  getSourceIcon: (source: string, isRecursive?: boolean) => React.ReactNode;
   visibleColumns: Set<string>;
+  onSelectAll?: (selected: boolean) => void;
+  allSelected?: boolean;
 }
 
 export const AssetTable: React.FC<AssetTableProps> = ({
@@ -25,7 +27,9 @@ export const AssetTable: React.FC<AssetTableProps> = ({
   getStatusBadge,
   getDetectionBadges,
   getSourceIcon,
-  visibleColumns
+  visibleColumns,
+  onSelectAll,
+  allSelected
 }) => {
   const columns: Column<Asset>[] = [
     {
@@ -82,6 +86,27 @@ export const AssetTable: React.FC<AssetTableProps> = ({
       )
     },
     {
+      id: 'cvss_score',
+      label: 'CVSS',
+      sortable: true,
+      width: '60px',
+      render: (item: Asset) => {
+        const maxCvss = item.findings.reduce((max, f) => Math.max(max, f.cvss_score || 0), 0);
+        return maxCvss > 0 ? (
+          <span style={{ 
+            fontWeight: 'bold', 
+            color: maxCvss >= 7 ? 'var(--status-critical)' : maxCvss >= 4 ? 'var(--status-warning)' : 'var(--status-safe)',
+            background: maxCvss >= 7 ? 'rgba(239, 68, 68, 0.1)' : maxCvss >= 4 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '11px'
+          }}>
+            {maxCvss.toFixed(1)}
+          </span>
+        ) : <span style={{ opacity: 0.3, fontSize: '10px' }}>-</span>;
+      }
+    },
+    {
       id: 'detections',
       label: 'Security Detections',
       minWidth: '150px',
@@ -94,10 +119,10 @@ export const AssetTable: React.FC<AssetTableProps> = ({
     },
     {
       id: 'source',
-      label: 'Src',
+      label: 'Source',
       sortable: true,
-      width: '60px',
-      render: (item: Asset) => getSourceIcon(item.source)
+      width: '110px',
+      render: (item: Asset) => getSourceIcon(item.source, item.recursive)
     }
   ].filter(col => col.id === 'id' || visibleColumns.has(col.id === 'status_code' ? 'status' : col.id === 'risk_score' ? 'risk' : col.id));
 
@@ -114,6 +139,8 @@ export const AssetTable: React.FC<AssetTableProps> = ({
         initialSort={undefined}
         onSort={(columnId) => onSort(columnId as keyof Asset)}
         sortConfig={sortConfig ? { columnId: sortConfig.key, direction: sortConfig.direction } : null}
+        onSelectAll={onSelectAll}
+        allSelected={allSelected}
       />
     </div>
   );

@@ -11,7 +11,7 @@ import {
     RotateCcw
 } from 'lucide-react';
 import { RequestSequence, VariableCapture } from '../../types';
-import { useDebugLogger } from '../DebugConsole';
+import { useDebugLogger } from '../debug/DebugConsole';
 import ReactMarkdown from 'react-markdown';
 
 export const SequenceEditor: React.FC = () => {
@@ -116,6 +116,17 @@ export const SequenceEditor: React.FC = () => {
         setSelectedSequence({ ...selectedSequence, steps: newSteps });
     };
 
+    const handleDeleteVariable = (stepIndex: number, varIndex: number) => {
+        if (!selectedSequence) return;
+        const newSteps = [...selectedSequence.steps];
+        const step = { ...newSteps[stepIndex] };
+        const captures = [...step.captures];
+        captures.splice(varIndex, 1);
+        step.captures = captures;
+        newSteps[stepIndex] = step;
+        setSelectedSequence({ ...selectedSequence, steps: newSteps });
+    };
+
     const handleUpdateVariable = (stepIndex: number, varIndex: number, field: keyof VariableCapture, value: string) => {
         if (!selectedSequence) return;
         const newSteps = [...selectedSequence.steps];
@@ -127,6 +138,22 @@ export const SequenceEditor: React.FC = () => {
         setSelectedSequence({ ...selectedSequence, steps: newSteps });
     };
 
+
+    const handleDeleteStep = async (index: number) => {
+        if (!selectedSequence) return;
+        const step = selectedSequence.steps[index];
+        if (!confirm('Are you sure you want to delete this step?')) return;
+        
+        try {
+            await invoke('delete_sequence_step', { step_id: step.id });
+            const newSteps = [...selectedSequence.steps];
+            newSteps.splice(index, 1);
+            setSelectedSequence({ ...selectedSequence, steps: newSteps });
+            success('Step deleted', 'Sequences');
+        } catch (e) {
+            error(`Failed to delete step: ${e}`, 'Sequences');
+        }
+    };
 
     return (
         <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -199,6 +226,16 @@ export const SequenceEditor: React.FC = () => {
                                             >
                                                 <Play size={12} />
                                             </button>
+                                            <button 
+                                                className="btn btn-sm btn-outline" 
+                                                onClick={(e) => { e.stopPropagation(); handleDeleteStep(idx); }}
+                                                disabled={isExecuting}
+                                                style={{ color: 'var(--status-critical)', borderColor: 'var(--status-critical)', marginLeft: '4px' }}
+                                                title="Delete Step"
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+
                                         </div>
 
                                         {activeStepIndex === idx && (
@@ -223,7 +260,13 @@ export const SequenceEditor: React.FC = () => {
                                                                     onChange={(e) => handleUpdateVariable(idx, vIdx, 'source', e.target.value)}
                                                                     style={{ flex: 2, background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '5px 10px', borderRadius: '4px', fontSize: '12px' }}
                                                                 />
-                                                                <button className="text-danger" style={{ background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                                                                <button 
+                                                                    className="text-danger" 
+                                                                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                                                                    onClick={() => handleDeleteVariable(idx, vIdx)}
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
                                                             </div>
                                                         ))}
                                                     </div>

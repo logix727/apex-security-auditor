@@ -43,4 +43,7 @@ thiserror = "2.0.18"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 refinery = { version = "0.8", features = ["rusqlite"] }
+keyring = "2"
+futures = "0.3"
+similar = "2"
 

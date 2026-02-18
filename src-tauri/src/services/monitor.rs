@@ -1,6 +1,5 @@
 use crate::commands::debug::log_debug;
 use crate::db::SqliteDatabase;
-use crate::scan_url;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -17,15 +16,15 @@ pub fn start_background_monitor(app_handle: AppHandle) {
                 _ => false,
             };
 
-            match db.get_stale_assets(10, 5) {
-                Ok(stale_assets) => {
-                    if !stale_assets.is_empty() {
+            match db.get_pending_scans(10) {
+                Ok(pending_assets) => {
+                    if !pending_assets.is_empty() {
                         println!(
-                            "Background Monitor: Processing {} assets.",
-                            stale_assets.len()
+                            "Background Monitor: Processing {} pending assets.",
+                            pending_assets.len()
                         );
                     }
-                    for asset in stale_assets {
+                    for asset in pending_assets {
                         let id = asset.id;
                         let url = asset.url.clone();
                         let method = asset.method.clone();
@@ -46,9 +45,9 @@ pub fn start_background_monitor(app_handle: AppHandle) {
                             }
 
                             let db_state = handle.state::<SqliteDatabase>();
-                            let result =
-                                scan_url(&db_state.client, &url, &method, &db_state.rate_limiter)
-                                    .await;
+                            let scan_service =
+                                crate::services::scan::ScanService::new(db_state.inner().clone());
+                            let result = scan_service.scan_url(&url, &method).await;
                             let _ = db_state.update_scan_result(
                                 id,
                                 &result.status,
@@ -66,6 +65,10 @@ pub fn start_background_monitor(app_handle: AppHandle) {
                             if should_recurse {
                                 if !recursive_enabled && source == "Recursive" {
                                     println!("Recursing on asset {} due to Recursive source", url);
+                                }
+
+                                if !recursive_enabled && source == "Recursive" {
+                                    return;
                                 }
 
                                 // 1. Get authorized domains to enforce scope
@@ -104,12 +107,28 @@ pub fn start_background_monitor(app_handle: AppHandle) {
                                                 });
 
                                             if !is_blacklisted && is_authorized {
-                                                let _ = db_state.add_asset(
-                                                    &discovered_url,
-                                                    "Recursive",
-                                                    None,
-                                                    true,
-                                                );
+                                                // Depth control: limit to depth 3
+                                                if asset.depth < 3 {
+                                                    let _ = db_state.add_asset(
+                                                        &discovered_url,
+                                                        "Recursive",
+                                                        None,
+                                                        true,
+                                                        false,
+                                                        asset.depth + 1,
+                                                    );
+                                                } else {
+                                                    println!("Depth limit reached for {}, skipping recursive sub-discovery", discovered_url);
+                                                    // Still add the asset but stop recursing further from it
+                                                    let _ = db_state.add_asset(
+                                                        &discovered_url,
+                                                        "Recursive",
+                                                        None,
+                                                        false,
+                                                        false,
+                                                        asset.depth + 1,
+                                                    );
+                                                }
                                             } else if is_blacklisted {
                                                 // Log for visibility during debugging
                                                 println!("Skipping blacklisted recursive discovery: {} (host: {})", discovered_url, host);
@@ -126,7 +145,7 @@ pub fn start_background_monitor(app_handle: AppHandle) {
                     }
                 }
                 Err(e) => eprintln!(
-                    "Background Monitor Error: Failed to fetch stale assets: {}",
+                    "Background Monitor Error: Failed to fetch pending assets: {}",
                     e
                 ),
             }

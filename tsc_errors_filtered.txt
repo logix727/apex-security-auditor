@@ -1,0 +1,38 @@
+src/components/AppContent.tsx(488,21): error TS2322: Type '{ processedAssets: Asset[]; folders: Folder[]; activeFolderId: number | null; setActiveFolderId: Dispatch<SetStateAction<number | null>>; ... 31 more ...; setVisibleColumns: (cols: Set<...>) => void; }' is not assignable to type 'IntrinsicAttributes & AssetsViewProps'.
+src/components/assets/AssetsContainer.tsx(2,17): error TS6133: 'Folder' is declared but its value is never read.
+src/components/assets/AssetsContainer.tsx(3,1): error TS6133: 'invoke' is declared but its value is never read.
+src/components/assets/AssetsContainer.tsx(4,32): error TS2307: Cannot find module '../common/DebugConsole' or its corresponding type declarations.
+src/components/assets/AssetsContainer.tsx(15,10): error TS6133: 'processedAssets' is declared but its value is never read.
+src/components/assets/AssetsContainer.tsx(16,10): error TS6133: 'isLoading' is declared but its value is never read.
+src/components/assets/AssetsErrorBoundary.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/assets/AssetsSidebar.tsx(2,10): error TS6133: 'Asset' is declared but its value is never read.
+src/components/assets/AssetsSidebar.tsx(3,1): error TS6133: 'useApp' is declared but its value is never read.
+src/components/assets/AssetsView.tsx(10,37): error TS6133: 'X' is declared but its value is never read.
+src/components/assets/AssetsView.tsx(78,3): error TS6133: 'setVisibleColumns' is declared but its value is never read.
+src/components/assets/AssetsView.tsx(91,3): error TS6133: 'onPurge' is declared but its value is never read.
+src/components/assets/AssetsView.tsx(94,3): error TS6133: 'onAnalyzeFlow' is declared but its value is never read.
+src/components/common/LoadingState.tsx(2,43): error TS6133: 'AlertCircle' is declared but its value is never read.
+src/components/table/SmartTable.tsx(7,3): error TS6133: 'ArrowUpDown' is declared but its value is never read.
+src/components/table/SmartTable.tsx(54,3): error TS6133: 'emptyMessage' is declared but its value is never read.
+src/components/table/SmartTable.tsx(85,9): error TS6133: 'estimatedTotalHeight' is declared but its value is never read.
+src/components/table/SmartTable.tsx(151,9): error TS6133: 'startResizing' is declared but its value is never read.
+src/components/table/SmartTable.tsx(187,9): error TS6133: 'autoResizeColumn' is declared but its value is never read.
+src/context/AssetContext.tsx(4,32): error TS2307: Cannot find module '../components/common/DebugConsole' or its corresponding type declarations.
+src/context/AssetContext.tsx(94,22): error TS2304: Cannot find name 'useCallback'.
+src/context/AssetContext.tsx(115,23): error TS2304: Cannot find name 'useCallback'.
+src/context/AssetContext.tsx(124,23): error TS2304: Cannot find name 'useCallback'.
+src/context/AssetContext.tsx(128,32): error TS2304: Cannot find name 'useCallback'.
+src/context/AssetContext.tsx(159,29): error TS2304: Cannot find name 'useCallback'.
+src/hooks/useAssetApi.ts(64,9): error TS6133: 'abortControllers' is declared but its value is never read.
+src/hooks/useDragAndDrop.ts(34,5): error TS6133: 'dragItemType' is declared but its value is never read.
+src/utils/assetUtils.tsx(212,40): error TS6133: 'filters' is declared but its value is never read.
+src/utils/assetUtils.tsx(213,25): error TS6133: 'asset' is declared but its value is never read.
+src/utils/assetUtils.tsx(219,28): error TS6133: 'assets' is declared but its value is never read.
+src/utils/assetUtils.tsx(224,42): error TS6133: 'filter' is declared but its value is never read.
+src/utils/assetUtils.tsx(230,24): error TS6133: 'asset' is declared but its value is never read.
+src/utils/assetUtils.tsx(240,25): error TS6133: 'asset' is declared but its value is never read.
+src/workers/assetWorker.ts(29,23): error TS6133: 'query' is declared but its value is never read.
+src/workers/assetWorker.ts(32,11): error TS7034: Variable 'results' implicitly has type 'any[]' in some locations where its type cannot be determined.
+src/workers/assetWorker.ts(33,57): error TS7005: Variable 'results' implicitly has an 'any[]' type.
+src/workers/assetWorker.ts(42,41): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+src/workers/assetWorker.ts(42,46): error TS7006: Parameter 'finding' implicitly has an 'any' type.

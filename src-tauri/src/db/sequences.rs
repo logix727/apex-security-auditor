@@ -15,7 +15,7 @@ impl SqliteDatabase {
         Ok(id)
     }
 
-    pub fn add_step_to_sequence(&self, step: &crate::data::SequenceStep) -> Result<()> {
+    pub fn add_step_to_sequence(&self, step: &crate::core::data::SequenceStep) -> Result<()> {
         let conn = self.conn.lock().map_err(|e| crate::error::Error::Internal(e.to_string()))?;
 
         conn.execute(
@@ -38,7 +38,7 @@ impl SqliteDatabase {
         Ok(())
     }
 
-    pub fn get_sequence(&self, id: &str) -> Result<crate::data::RequestSequence> {
+    pub fn get_sequence(&self, id: &str) -> Result<crate::core::data::RequestSequence> {
         let conn = self.conn.lock().map_err(|e| crate::error::Error::Internal(e.to_string()))?;
 
         let entry: (String, Option<String>, String, Option<String>) = conn.query_row(
@@ -62,7 +62,7 @@ impl SqliteDatabase {
         )?;
 
         let step_iter = steps_stmt.query_map([id], |row| {
-            Ok(crate::data::SequenceStep {
+            Ok(crate::core::data::SequenceStep {
                 id: row.get(0)?,
                 sequence_id: row.get(1)?,
                 asset_id: row.get(2)?,
@@ -83,7 +83,7 @@ impl SqliteDatabase {
             steps.push(s?);
         }
 
-        Ok(crate::data::RequestSequence {
+        Ok(crate::core::data::RequestSequence {
             id: seq_id,
             flow_name: name,
             steps,
@@ -92,12 +92,12 @@ impl SqliteDatabase {
         })
     }
 
-    pub fn list_sequences(&self) -> Result<Vec<crate::data::RequestSequence>> {
+    pub fn list_sequences(&self) -> Result<Vec<crate::core::data::RequestSequence>> {
         let conn = self.conn.lock().map_err(|e| crate::error::Error::Internal(e.to_string()))?;
 
         let mut stmt = conn.prepare("SELECT id, name, created_at, context_summary FROM sequences ORDER BY created_at DESC")?;
         let seq_iter = stmt.query_map([], |row| {
-             Ok(crate::data::RequestSequence {
+             Ok(crate::core::data::RequestSequence {
                 id: row.get(0)?,
                 flow_name: row.get(1)?,
                 steps: vec![],
@@ -111,5 +111,10 @@ impl SqliteDatabase {
             sequences.push(s?);
         }
         Ok(sequences)
+    }
+    pub fn delete_step_from_sequence(&self, step_id: i64) -> Result<()> {
+        let conn = self.conn.lock().map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+        conn.execute("DELETE FROM sequence_steps WHERE id = ?1", [step_id])?;
+        Ok(())
     }
 }

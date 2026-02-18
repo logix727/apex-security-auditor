@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Globe, Plus, ShieldCheck, AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
+import { Search, Globe, ShieldCheck, AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 

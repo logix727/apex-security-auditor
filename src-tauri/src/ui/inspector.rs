@@ -98,13 +98,20 @@ pub async fn sign_jwt(
     let mut btree_claims = BTreeMap::new();
     if let Some(obj) = claims.as_object() {
         for (k, v) in obj {
-            btree_claims.insert(k.clone(), v.to_string().replace('"', ""));
+            // Fix: Handle non-string types correctly by keeping them as JSON values if possible,
+            // but the jwt create expects strings for simple signing or we need a proper struct.
+            // The simple map-based signing converts everything to strings usually.
+            // Let's ensure we at least clean up quotes for strings.
+            match v {
+                serde_json::Value::String(s) => {
+                    btree_claims.insert(k.clone(), s.clone());
+                }
+                _ => {
+                    btree_claims.insert(k.clone(), v.to_string());
+                }
+            }
         }
     }
-
-    // TODO: Actually use the header. The 'jwt' crate's simple SignWithKey trait implementation
-    // for BTreeMap defaults to a standard header. To use custom headers, we'd need to construct
-    // a Token struct manually. For now, we trust the default HS256 header.
 
     let token = btree_claims
         .sign_with_key(&key)

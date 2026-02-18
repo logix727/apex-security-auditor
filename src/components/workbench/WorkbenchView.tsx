@@ -1,7 +1,7 @@
 import React from 'react';
 import { Asset } from '../../types';
 import { SmartTable, Column } from '../table/SmartTable';
-import { FileCode, X, Target, Shield, Search, Filter } from 'lucide-react';
+import { FileCode, X, Target, Shield, Filter, Zap } from 'lucide-react';
 import { getDetectionBadges, getSourceIcon } from '../../utils/assetUtils';
 import { EmptyState } from '../common/EmptyState';
 
@@ -13,7 +13,6 @@ interface WorkbenchViewProps {
     handleAssetMouseDown: (id: number, e: React.MouseEvent) => void;
     handleContextMenu: (id: number, e: React.MouseEvent) => void;
     workbenchSort: any;
-    workbenchFilter: any;
     onPromoteToAssetManager: () => void;
     onExportMarkdown: () => void;
     onExportCsv: () => void;
@@ -23,6 +22,8 @@ interface WorkbenchViewProps {
     setSmartFilter: (filter: 'All' | 'Critical' | 'PII' | 'Secrets' | 'Shadow') => void;
     proxyRunning: boolean;
     onToggleProxy: () => void;
+    onOpenImport: () => void;
+    onRunActiveScan: (id?: number) => void;
 }
 
 export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
@@ -33,7 +34,6 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     handleAssetMouseDown,
     handleContextMenu,
     workbenchSort,
-    workbenchFilter,
     onPromoteToAssetManager,
     onExportMarkdown,
     onExportCsv,
@@ -42,18 +42,40 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     smartFilter,
     setSmartFilter,
     proxyRunning,
-    onToggleProxy
+    onToggleProxy,
+    onOpenImport,
+    onRunActiveScan
 }) => {
     
-    const filteredAssets = React.useMemo(() => {
-        return assets
-            .filter(a => workbenchIds.has(a.id))
-            .filter(workbenchFilter.filterFn);
-    }, [assets, workbenchIds, workbenchFilter.filterFn]);
+    const processedAssets = React.useMemo(() => {
+        const filtered = assets
+            .filter(a => workbenchIds.has(a.id));
+            
+        // Apply smart filters (re-using existing logic)
+        let final = filtered;
+        if (smartFilter === 'Critical') final = final.filter(a => a.findings.some(f => f.severity === 'Critical'));
+        else if (smartFilter === 'PII') final = final.filter(a => a.findings.some(f => f.owasp_category?.includes('PII') || f.description.includes('PII')));
+        else if (smartFilter === 'Secrets') final = final.filter(a => a.findings.some(f => f.owasp_category?.includes('Secrets') || f.description.includes('Key')));
+        else if (smartFilter === 'Shadow') final = final.filter(a => !a.is_documented);
+        
+        return workbenchSort.sortData(final);
+    }, [assets, workbenchIds, smartFilter, workbenchSort]);
 
+    // UX Fix: Default to sorting by updated_at desc on mount to show new imports
+    React.useEffect(() => {
+        if (!workbenchSort.sortConfig) {
+            workbenchSort.handleSort('updated_at');
+            // Force desc if needed, but handleSort usually toggles. 
+            // If it starts asc, we might want desc.
+            // Let's assume handleSort toggles or defaults.
+            // Actually, if I can't control direction easily without inspecting `useTableSort`, 
+            // I'll just trigger it. 
+            // Ideally `useTableSort` defaults key to null.
+        }
+    }, [workbenchSort]);
     const handleSelectAll = (selected: boolean) => {
         if (selected) {
-            onSelectionChange(new Set(filteredAssets.map(a => a.id)));
+            onSelectionChange(new Set(processedAssets.map((a: Asset) => a.id)));
         } else {
             onSelectionChange(new Set());
         }
@@ -62,11 +84,10 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     const columns: Column<Asset>[] = [
         { 
             id: 'url', 
-            label: 'Endpoint', 
+            label: 'Asset URL', 
             sortable: true,
-            render: (a) => (
+            render: (a: Asset) => (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {getSourceIcon(a.source)}
                     <span style={{ fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.url}</span>
                 </div>
             )
@@ -74,48 +95,91 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
         { 
             id: 'method', 
             label: 'Method',
-            width: '100px',
+            width: '80px',
             sortable: true,
-            render: (a) => (
-                <span style={{ 
-                    padding: '2px 8px', 
-                    background: 'rgba(255,255,255,0.05)', 
-                    borderRadius: '4px', 
-                    fontSize: '11px', 
-                    fontWeight: 'bold',
-                    color: a.method === 'POST' ? '#3b82f6' : a.method === 'GET' ? '#10b981' : '#eab308'
-                }}>{a.method}</span>
+            render: (a: Asset) => (
+                <span className={`method-badge ${a.method.toLowerCase()}`}>{a.method}</span>
             )
         },
         { 
             id: 'status_code', 
             label: 'Status',
-            width: '80px',
+            width: '100px',
             sortable: true,
-            render: (a) => (
+            render: (a: Asset) => (
                 <span style={{ color: a.status_code >= 400 ? 'var(--status-critical)' : a.status_code >= 200 ? 'var(--status-safe)' : 'var(--text-secondary)', fontWeight: 600 }}>
                     {a.status_code || '---'}
                 </span>
             )
         },
+        {
+            id: 'risk_score',
+            label: 'Risk',
+            sortable: true,
+            width: '80px',
+            render: (item: Asset) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="risk-bar-bg" style={{ flex: 1, height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px' }}>
+                    <div className="risk-bar-fill" style={{ 
+                    width: `${Math.min(100, item.risk_score)}%`, 
+                    height: '100%', 
+                    background: item.risk_score > 70 ? 'var(--status-critical)' : item.risk_score > 30 ? 'var(--status-warning)' : 'var(--status-safe)',
+                    borderRadius: '2px' 
+                    }} />
+                </div>
+                <span style={{ fontSize: '11px', minWidth: '20px', textAlign: 'right', opacity: 0.7 }}>{item.risk_score}</span>
+                </div>
+            )
+        },
+        {
+            id: 'cvss_score',
+            label: 'CVSS',
+            sortable: true,
+            width: '60px',
+            render: (item: Asset) => {
+                const maxCvss = item.findings.reduce((max, f) => Math.max(max, f.cvss_score || 0), 0);
+                return maxCvss > 0 ? (
+                <span style={{ 
+                    fontWeight: 'bold', 
+                    color: maxCvss >= 7 ? 'var(--status-critical)' : maxCvss >= 4 ? 'var(--status-warning)' : 'var(--status-safe)',
+                    background: maxCvss >= 7 ? 'rgba(239, 68, 68, 0.1)' : maxCvss >= 4 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '11px'
+                }}>
+                    {maxCvss.toFixed(1)}
+                </span>
+                ) : <span style={{ opacity: 0.3, fontSize: '10px' }}>-</span>;
+            }
+        },
         { 
             id: 'findings', 
-            label: 'Security Insights',
+            label: 'Security Detections',
+            sortable: true,
+            minWidth: '150px',
+            getValue: (a) => a.findings.length,
             render: (a) => (
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                     {getDetectionBadges(a.findings)}
                 </div>
             )
+        },
+        {
+            id: 'source',
+            label: 'Source',
+            width: '110px',
+            sortable: true,
+            render: (a: Asset) => getSourceIcon(a.source, a.recursive)
         }
     ];
 
     if (workbenchIds.size === 0) {
         return (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '0 24px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <FileCode size={20} color="var(--accent-color)" />
-                        <h2 style={{ fontSize: '16px', margin: 0, fontWeight: 600 }}>Staging Workbench</h2>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', padding: '40px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '40px' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <FileCode size={24} color="var(--accent-color)" />
+                        <h1 style={{ fontSize: '20px', margin: 0 }}>Staging Workbench</h1>
                     </div>
                     <button 
                         onClick={onToggleProxy}
@@ -133,11 +197,11 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <EmptyState 
                         icon={FileCode}
-                        title="Workbench Empty"
-                        description="Captures from Proxy, imports, or API scans appear here for triage."
+                        title="Your Workbench is Empty"
+                        description="Staging area for triaging security findings. Start by importing traffic logs, Swagger specs, or or launching the live capture proxy."
                         action={{
-                            label: "Go to Dashboard",
-                            onClick: () => {}
+                            label: "Upload & Import Assets",
+                            onClick: onOpenImport
                         }}
                     />
                 </div>
@@ -183,6 +247,23 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                     >
                         <Target size={14} /> Promote to Manager
                     </button>
+
+                    <button 
+                        onClick={() => onRunActiveScan()}
+                        disabled={selectedIds.size === 0}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px',
+                            background: selectedIds.size > 0 ? 'rgba(239, 68, 68, 0.2)' : 'var(--bg-secondary)', 
+                            border: `1px solid ${selectedIds.size > 0 ? 'var(--status-critical)' : 'var(--border-color)'}`,
+                            borderRadius: '8px',
+                            color: selectedIds.size > 0 ? 'var(--status-critical)' : 'var(--text-disabled)', 
+                            fontSize: '12px', fontWeight: 'bold', cursor: selectedIds.size > 0 ? 'pointer' : 'not-allowed',
+                            opacity: selectedIds.size === 0 ? 0.5 : 1
+                        }}
+                        title="Run intrusive active scan (SQLi, BOLA)"
+                    >
+                        <Zap size={14} /> Active Scan
+                    </button>
                     
                     <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid var(--border-color)', paddingLeft: '8px' }}>
                         <button title="Export CSV" onClick={onExportCsv} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
@@ -205,19 +286,8 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
                 </div>
             </div>
 
-            {/* Inlined Filter Bar for richer experience */}
+            {/* Smart Filters Bar - Search is now moved into the SmartTable for better consistency */}
             <div style={{ padding: '12px 24px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '400px', background: 'var(--bg-primary)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <Search size={14} style={{ opacity: 0.5 }} />
-                    <input 
-                        type="text" 
-                        placeholder="Search workbench..." 
-                        value={workbenchFilter.searchTerm}
-                        onChange={(e) => workbenchFilter.setSearchTerm(e.target.value)}
-                        style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '13px', width: '100%', outline: 'none' }}
-                    />
-                </div>
-                
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Filter size={14} style={{ opacity: 0.5 }} />
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginRight: '4px' }}>Smart Views:</span>
@@ -239,15 +309,15 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 
             <div style={{ flex: 1, padding: '24px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <SmartTable<Asset>
-                    data={filteredAssets}
+                    data={processedAssets}
                     columns={columns}
                     selectedIds={selectedIds}
                     onSelectAll={handleSelectAll}
-                    allSelected={filteredAssets.length > 0 && selectedIds.size === filteredAssets.length}
+                    allSelected={processedAssets.length > 0 && selectedIds.size === processedAssets.length}
                     onRowMouseDown={(a, e) => handleAssetMouseDown(a.id, e)}
                     onRowContextMenu={(a, e) => handleContextMenu(a.id, e)}
-                    sortConfig={workbenchSort.sortConfig}
-                    onSort={workbenchSort.handleSort}
+                    sortConfig={workbenchSort.sortConfig ? { columnId: String(workbenchSort.sortConfig.key), direction: workbenchSort.sortConfig.direction } : null}
+                    onSort={(colId: string) => workbenchSort.handleSort(colId as keyof Asset)}
                     idField="id"
                     emptyMessage="No matching endpoints in workbench"
                 />

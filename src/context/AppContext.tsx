@@ -1,7 +1,8 @@
-import { createContext, useContext, ReactNode, useMemo } from 'react';
-import { Asset, Folder, SortConfig } from '../types';
+import { Asset, Folder } from '../types';
+import { SortConfig } from '../types/table';
 import { useTableSort } from '../hooks/useTableSort';
 import { useAssetData } from '../hooks/useAssetData';
+import { createContext, useContext, ReactNode, useMemo } from 'react';
 import { useAssetFilter } from '../hooks/useAssetFilter';
 
 interface AppContextType {
@@ -45,16 +46,20 @@ interface AppContextType {
     setBodySearchTerm: (term: string) => void;
     
     // Derived State (Hooks)
-    sortConfig: SortConfig | null;
+    sortConfig: SortConfig<Asset> | null;
     handleSort: (key: keyof Asset) => void;
     filteredAssets: Asset[]; 
     sortedAssets: Asset[];   
     
-    workbenchFilterAdapter: any; 
+    workbenchSort: {
+        sortConfig: SortConfig<Asset> | null;
+        handleSort: (key: keyof Asset) => void;
+        sortData: (data: Asset[]) => Asset[];
+    };
 
     // Actions
     loadFolders: () => Promise<void>;
-    loadAssets: () => Promise<void>;
+    loadAssets: () => Promise<Asset[]>;
     refreshData: () => Promise<void>;
     handleAssetMouseDown: (id: number, e: React.MouseEvent) => void;
     handleContextMenu: (id: number, e: React.MouseEvent) => void;
@@ -70,28 +75,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         assetData.selectedTreePath
     );
 
+    const workbenchSort = useTableSort<Asset>();
+
     const { sortConfig, handleSort, sortData } = useTableSort<Asset>();
     const sortedAssets = useMemo(() => sortData(assetFilter.filteredAssets), [assetFilter.filteredAssets, sortData]);
 
     const handleAssetMouseDown = (id: number, e: React.MouseEvent) => {
         assetData.handleAssetMouseDown(id, e, sortedAssets);
-    };
-
-    const workbenchFilterAdapter = {
-        filters: {}, 
-        setFilter: () => {}, 
-        getFilter: () => undefined,
-        resetFilters: () => {},
-        resetFilter: () => {},
-        filterData: (data: Asset[]) => data, 
-        activeFilterCount: 0,
-        hasActiveFilters: false,
-        searchTerm: assetFilter.searchTerm,
-        setSearchTerm: assetFilter.setSearchTerm,
-        filterFn: (a: Asset) => {
-            if (!assetFilter.searchTerm) return true;
-            return a.url.toLowerCase().includes(assetFilter.searchTerm.toLowerCase());
-        }
     };
 
     return (
@@ -102,7 +92,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             handleSort,
             sortedAssets,
             handleAssetMouseDown,
-            workbenchFilterAdapter
+            workbenchSort: {
+                sortConfig: workbenchSort.sortConfig,
+                handleSort: workbenchSort.handleSort,
+                sortData: workbenchSort.sortData
+            }
         }}>
             {children}
         </AppContext.Provider>

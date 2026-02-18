@@ -1,6 +1,6 @@
+use crate::core::detectors::classify_vulnerability;
 use crate::db::SqliteDatabase;
-use crate::detectors::classify_vulnerability;
-use crate::scan_url;
+use crate::services::scan::ScanService;
 use tauri::{AppHandle, Emitter, Manager};
 
 #[tauri::command]
@@ -19,7 +19,8 @@ pub async fn rescan_asset(app: AppHandle, id: i64) -> Result<(), String> {
 
         tauri::async_runtime::spawn(async move {
             let db_state = app_handle.state::<SqliteDatabase>();
-            let result = scan_url(&db_state.client, &url, &method, &db_state.rate_limiter).await;
+            let scan_service = ScanService::new(db_state.inner().clone());
+            let result = scan_service.scan_url(&url, &method).await;
             let _ = db_state.update_scan_result(
                 id,
                 &result.status,

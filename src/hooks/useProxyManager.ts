@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useDebugLogger } from '../components/DebugConsole';
+import { useDebugLogger } from '../components/debug/DebugConsole';
 
 export function useProxyManager() {
     const { success, error } = useDebugLogger();
@@ -10,11 +10,11 @@ export function useProxyManager() {
     const handleToggleProxy = useCallback(async () => {
         try {
             if (proxyRunning) {
-                await invoke('stop_proxy');
+                await invoke('stop_proxy_service');
                 setProxyRunning(false);
                 success('proxy', 'Proxy service stopped');
             } else {
-                await invoke('start_proxy', { port: proxyPort });
+                await invoke('start_proxy_service');
                 setProxyRunning(true);
                 success('proxy', `Proxy service started on port ${proxyPort}`);
             }

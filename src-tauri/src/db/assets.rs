@@ -8,6 +8,8 @@ impl SqliteDatabase {
         source: &str,
         method: Option<&str>,
         recursive: bool,
+        is_workbench: bool,
+        depth: i32,
     ) -> Result<i64> {
         let conn = self
             .conn
@@ -15,19 +17,57 @@ impl SqliteDatabase {
             .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
         let method_val = method.unwrap_or("GET");
 
+        println!(
+            "[DB] Adding asset: {} ({}) Source: {}",
+            url, method_val, source
+        );
+
         conn.execute(
-            "INSERT OR IGNORE INTO assets (url, method, status, source, recursive) VALUES (?1, ?2, 'Pending', ?3, ?4)",
-            (url, method_val, source, recursive),
+            "INSERT OR IGNORE INTO assets (url, method, status, source, recursive, is_workbench, depth) VALUES (?1, ?2, 'Pending', ?3, ?4, ?5, ?6)",
+            (url, method_val, source, recursive, is_workbench, depth),
         )?;
 
-        let (id, current_recursive): (i64, bool) = conn.query_row(
-            "SELECT id, recursive FROM assets WHERE url = ?1",
-            [url],
-            |row| Ok((row.get(0)?, row.get::<_, bool>(1).unwrap_or(false))),
-        )?;
+        let (id, current_recursive, current_source): (i64, bool, String) = conn
+            .query_row(
+                "SELECT id, recursive, source FROM assets WHERE url = ?1 AND method = ?2",
+                (url, method_val),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get::<_, bool>(1).unwrap_or(false),
+                        row.get::<_, String>(2)
+                            .unwrap_or_else(|_| "User".to_string()),
+                    ))
+                },
+            )
+            .map_err(|e| {
+                println!("[DB] Failed to retrieve asset after insert/ignore: {}", e);
+                e
+            })?;
+
+        println!(
+            "[DB] Asset ID: {}, Current Source: {}, Target Source: {}",
+            id, current_source, source
+        );
 
         if recursive && !current_recursive {
             let _ = conn.execute("UPDATE assets SET recursive = 1 WHERE id = ?1", [id]);
+        }
+
+        // If newly added or existing, update source if provided source is not "Recursive"
+        // This allows upgrading "Recursive" assets to "Import" or "Workbench"
+        if source != "Recursive" && source != current_source {
+            println!(
+                "[DB] Updating source for asset {} from {} to {}",
+                id, current_source, source
+            );
+            let _ = conn.execute("UPDATE assets SET source = ?1 WHERE id = ?2", (source, id));
+        }
+
+        // If is_workbench is requested, force it!
+        if is_workbench {
+            println!("[DB] SETTING is_workbench=true for asset ID: {}", id);
+            let _ = conn.execute("UPDATE assets SET is_workbench = 1 WHERE id = ?1", [id]);
         }
 
         Ok(id)
@@ -38,7 +78,7 @@ impl SqliteDatabase {
             .conn
             .lock()
             .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
-        let mut stmt = conn.prepare("SELECT id, url, method, status, status_code, risk_score, findings, folder_id, response_headers, response_body, request_headers, request_body, created_at, updated_at, notes, triage_status, is_documented, source, recursive FROM assets ORDER BY id DESC")?;
+        let mut stmt = conn.prepare("SELECT id, url, method, status, status_code, risk_score, findings, folder_id, response_headers, response_body, request_headers, request_body, created_at, updated_at, notes, triage_status, is_documented, source, recursive, is_workbench, depth FROM assets ORDER BY id DESC")?;
 
         let asset_iter = stmt.query_map([], |row| {
             let findings_json: String = row.get(6)?;
@@ -63,6 +103,8 @@ impl SqliteDatabase {
                 is_documented: row.get(16).unwrap_or(true),
                 source: row.get(17).unwrap_or_else(|_| "User".to_string()),
                 recursive: row.get(18).unwrap_or(false),
+                is_workbench: row.get(19).unwrap_or(false),
+                depth: row.get(20).unwrap_or(0),
             })
         })?;
 
@@ -70,6 +112,12 @@ impl SqliteDatabase {
         for asset in asset_iter {
             assets.push(asset?);
         }
+        let wb_count = assets.iter().filter(|a| a.is_workbench).count();
+        println!(
+            "[DB] get_assets returning {} assets, {} with is_workbench=true",
+            assets.len(),
+            wb_count
+        );
         Ok(assets)
     }
 
@@ -173,6 +221,9 @@ impl SqliteDatabase {
             }
         }
         Ok(domains)
+    }
+    pub fn add_authorized_domain(&self, _domain: &str) -> Result<()> {
+        Ok(())
     }
 
     pub fn update_asset_triage(&self, id: i64, triage_status: &str, notes: &str) -> Result<()> {
@@ -291,6 +342,55 @@ impl SqliteDatabase {
         Ok(())
     }
 
+    pub fn get_pending_scans(&self, limit: i32) -> Result<Vec<Asset>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+        let mut stmt = conn.prepare("
+            SELECT id, url, method, status, status_code, risk_score, findings, folder_id, response_headers, response_body, request_headers, request_body, created_at, updated_at, notes, triage_status, is_documented, source, recursive, is_workbench, depth 
+            FROM assets 
+            WHERE status = 'Pending'
+            ORDER BY created_at ASC
+            LIMIT ?1
+        ")?;
+
+        let asset_iter = stmt.query_map([limit], |row| {
+            let findings_json: String = row.get(6)?;
+            let findings: Vec<Badge> = serde_json::from_str(&findings_json).unwrap_or_default();
+            Ok(Asset {
+                id: row.get(0)?,
+                url: row.get(1)?,
+                method: row.get(2)?,
+                status: row.get(3)?,
+                status_code: row.get(4)?,
+                risk_score: row.get(5)?,
+                findings,
+                folder_id: row.get(7)?,
+                response_headers: row.get(8)?,
+                response_body: row.get(9)?,
+                request_headers: row.get(10)?,
+                request_body: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
+                notes: row.get(14).unwrap_or_else(|_| "".to_string()),
+                triage_status: row.get(15).unwrap_or_else(|_| "Unreviewed".to_string()),
+                is_documented: row.get(16).unwrap_or(true),
+                source: row.get(17).unwrap_or_else(|_| "User".to_string()),
+                recursive: row.get(18).unwrap_or(false),
+                is_workbench: row.get(19).unwrap_or(false),
+                depth: row.get(20).unwrap_or(0),
+            })
+        })?;
+
+        let mut assets = Vec::new();
+        for asset in asset_iter {
+            assets.push(asset?);
+        }
+        Ok(assets)
+    }
+
     pub fn get_stale_assets(&self, limit: i32, minutes_stale: i32) -> Result<Vec<Asset>> {
         let conn = self
             .conn
@@ -298,7 +398,7 @@ impl SqliteDatabase {
             .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
 
         let mut stmt = conn.prepare("
-            SELECT id, url, method, status, status_code, risk_score, findings, folder_id, response_headers, response_body, request_headers, request_body, created_at, updated_at, notes, triage_status, is_documented, source, recursive 
+            SELECT id, url, method, status, status_code, risk_score, findings, folder_id, response_headers, response_body, request_headers, request_body, created_at, updated_at, notes, triage_status, is_documented, source, recursive, is_workbench, depth 
             FROM assets 
             WHERE datetime(updated_at, '+' || ?1 || ' minutes') < datetime('now')
             OR status = 'Pending'
@@ -329,6 +429,8 @@ impl SqliteDatabase {
                 is_documented: row.get(16).unwrap_or(true),
                 source: row.get(17).unwrap_or_else(|_| "User".to_string()),
                 recursive: row.get(18).unwrap_or(false),
+                is_workbench: row.get(19).unwrap_or(false),
+                depth: row.get(20).unwrap_or(0),
             })
         })?;
 
@@ -448,6 +550,18 @@ impl SqliteDatabase {
         Ok(())
     }
 
+    pub fn update_asset_workbench_status(&self, id: i64, is_workbench: bool) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+        conn.execute(
+            "UPDATE assets SET is_workbench = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+            (is_workbench, id),
+        )?;
+        Ok(())
+    }
+
     pub fn batch_mark_shadow_apis(&self, asset_ids: &[i64]) -> Result<usize> {
         let conn = self
             .conn
@@ -464,5 +578,123 @@ impl SqliteDatabase {
         }
 
         Ok(count)
+    }
+
+    pub fn asset_exists_by_url_method(&self, url: &str, method: &str) -> bool {
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM assets WHERE url = ?1 AND method = ?2",
+                (url, method),
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        count > 0
+    }
+
+    pub fn is_asset_recently_scanned(&self, url: &str, method: &str, minutes: i32) -> bool {
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+
+        let result: std::result::Result<i32, rusqlite::Error> = conn.query_row(
+            "SELECT 1 FROM assets WHERE url = ?1 AND method = ?2 AND status != 'Pending' AND datetime(updated_at, '+' || ?3 || ' minutes') > datetime('now')",
+            (url, method, minutes),
+            |row| row.get(0),
+        );
+
+        result.is_ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::db::SqliteDatabase;
+
+    fn setup_db() -> SqliteDatabase {
+        SqliteDatabase::new(":memory:").expect("Failed to create in-memory db")
+    }
+
+    #[test]
+    fn test_duplicate_asset_updates_source() {
+        let db = setup_db();
+        // 1. Add asset as Recursive
+        let id1 = db
+            .add_asset(
+                "http://example.com",
+                "Recursive",
+                Some("GET"),
+                true,
+                false,
+                0,
+            )
+            .unwrap();
+
+        // Use verify asset exists
+        // Since get_assets returns all, we can filter or just check first
+        let assets = db.get_assets().unwrap();
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].source, "Recursive");
+        assert_eq!(assets[0].recursive, true);
+
+        // 2. Add same asset as Workbench (should update source)
+        let id2 = db
+            .add_asset(
+                "http://example.com",
+                "Workbench",
+                Some("GET"),
+                true,
+                true,
+                0,
+            )
+            .unwrap();
+
+        // IDs should be same as we return existing ID
+        assert_eq!(id1, id2);
+
+        let assets_updated = db.get_assets().unwrap();
+        assert_eq!(assets_updated.len(), 1);
+        assert_eq!(assets_updated[0].source, "Workbench"); // Source updated!
+        assert_eq!(assets_updated[0].recursive, true);
+    }
+
+    #[test]
+    fn test_recursive_flag_updates() {
+        let db = setup_db();
+        // 1. Add asset as Non-Recursive
+        let id1 = db
+            .add_asset("http://test.com", "Import", Some("GET"), false, false, 0)
+            .unwrap();
+
+        let assets = db.get_assets().unwrap();
+        assert!(!assets[0].recursive);
+
+        // 2. Add same asset as Recursive
+        let id2 = db
+            .add_asset("http://test.com", "Import", Some("GET"), true, false, 0)
+            .unwrap();
+
+        assert_eq!(id1, id2);
+
+        let assets_updated = db.get_assets().unwrap();
+        assert!(assets_updated[0].recursive); // Flag updated!
+    }
+
+    #[test]
+    fn test_distinct_methods() {
+        let db = setup_db();
+        let _ = db
+            .add_asset("http://api.com", "Import", Some("GET"), false, false, 0)
+            .unwrap();
+        let _ = db
+            .add_asset("http://api.com", "Import", Some("POST"), false, false, 0)
+            .unwrap();
+
+        let assets = db.get_assets().unwrap();
+        assert_eq!(assets.len(), 2);
     }
 }

@@ -4,7 +4,6 @@ import {
   ChevronUp, 
   ChevronDown, 
   Search, 
-  ArrowUpDown,
   AlignLeft, 
   StretchHorizontal,
   Rows,
@@ -51,7 +50,7 @@ export function SmartTable<T extends object>({
   selectedIds,
   idField = 'id' as keyof T,
   searchPlaceholder = 'Search...',
-  emptyMessage = 'No data available',
+  emptyMessage: _emptyMessage = 'No data available',
   initialSort,
   onSelectAll,
   allSelected,
@@ -66,16 +65,64 @@ export function SmartTable<T extends object>({
   );
   const [isSmartWrap, setIsSmartWrap] = useState(true);
   const [isCompact, setIsCompact] = useState(false);
-  const [visibleColumnIds, setVisibleColumnIds] = useState<Set<string>>(new Set(columns.map(c => c.id)));
+  const [visibleColumnIds, setVisibleColumnIds] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('smart-table-cols');
+    return saved ? new Set(JSON.parse(saved)) : new Set(columns.map(c => c.id));
+  });
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   
   const resizingRef = useRef<{ columnId: string; startX: number; startWidth: number } | null>(null);
+  const selectionRef = useRef<{ startIdx: number; isDragging: boolean } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [tableHeight, setTableHeight] = useState(0);
 
   // Constants
   const rowHeight = isCompact ? 32 : 48;
   const activeSort = externalSortConfig || internalSortConfig;
+  const itemCount = data.length;
+  // estimatedTotalHeight used indirectly via itemCount and rowHeight
+
+  // Performance optimization: Only render visible rows
+  const visibleRowCount = Math.ceil(tableHeight / rowHeight) + 2; // +2 for buffer
+  const startIndex = Math.max(0, Math.floor(scrollRef.current?.scrollTop || 0) / rowHeight);
+  const endIndex = Math.min(itemCount, startIndex + visibleRowCount);
+
+  // Memoize filtered data with stable reference
+  const stableFilteredData = useMemo(() => data.slice(startIndex, endIndex), [data, startIndex, endIndex]);
+
+  // Performance monitoring
+  useEffect(() => {
+    const startTime = performance.now();
+    
+    return () => {
+      const endTime = performance.now();
+      const renderTime = endTime - startTime;
+      if (renderTime > 100) {
+        console.warn('SmartTable render time:', renderTime.toFixed(2), 'ms');
+      }
+    };
+  }, [data, columns, searchTerm, activeSort, onSort]);
+
+  // Persistence Effects
+  useEffect(() => {
+    localStorage.setItem('smart-table-cols', JSON.stringify(Array.from(visibleColumnIds)));
+  }, [visibleColumnIds]);
+
+  useEffect(() => {
+    localStorage.setItem('smart-table-widths', JSON.stringify(columnWidths));
+  }, [columnWidths]);
+
+  useEffect(() => {
+    const savedWidths = localStorage.getItem('smart-table-widths');
+    if (savedWidths) {
+      try {
+        setColumnWidths(JSON.parse(savedWidths));
+      } catch (e) {
+        console.error('Failed to load column widths', e);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setTableHeight(scrollRef.current?.clientHeight || 0);
@@ -147,9 +194,9 @@ export function SmartTable<T extends object>({
 
     let maxWidth = context.measureText(String(col.label || '')).width + 32;
 
-    const sampleSize = Math.min(filteredData.length, 50);
+    const sampleSize = Math.min(data.length, 50);
     for (let i = 0; i < sampleSize; i++) {
-        const item = filteredData[i];
+        const item = data[i];
         let text = '';
         if (col.getValue) {
             text = String(col.getValue(item) || '');
@@ -192,66 +239,62 @@ export function SmartTable<T extends object>({
       setDraggedColumn(null);
   };
 
-  const filteredData = useMemo(() => {
-    let result = [...data];
-
-    if (searchTerm) {
-      const lowerSearch = searchTerm.toLowerCase();
-      result = result.filter(item => {
-        return orderedColumns.some(col => {
-          const val = col.getValue ? col.getValue(item) : (item as any)[col.id];
-          return String(val || '').toLowerCase().includes(lowerSearch);
-        });
-      });
-    }
-
-    if (activeSort && !onSort) {
-      result.sort((a, b) => {
-        const col = orderedColumns.find(c => c.id === activeSort.columnId);
-        const aVal = col?.getValue ? col.getValue(a) : (a as any)[activeSort.columnId];
-        const bVal = col?.getValue ? col.getValue(b) : (b as any)[activeSort.columnId];
-
-        if (aVal === bVal) return 0;
-        const multiplier = activeSort.direction === 'asc' ? 1 : -1;
-        
-        if (typeof aVal === 'number' && typeof bVal === 'number') {
-            return (aVal - bVal) * multiplier;
-        }
-        return String(aVal || '').localeCompare(String(bVal || '')) * multiplier;
-      });
-    }
-
-    return result;
-  }, [data, searchTerm, activeSort, orderedColumns, onSort]);
-
-  // Sync scroll for header and body
-  const headerRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<any>(null);
-
-  const onScroll = ({ scrollOffset }: { scrollOffset: number }) => {
-    if (headerRef.current) {
-      headerRef.current.scrollLeft = scrollOffset;
-    }
-  };
-
   const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
-    const item = filteredData[index];
+    const item = stableFilteredData[index];
     const isSelected = (selectedIds?.has((item as any)[idField]) || selectedId === (item as any)[idField]);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+      if (e.button !== 0) return; // Only left click
+      
+      if (onRowMouseDown) {
+        onRowMouseDown(item, e);
+      }
+      
+      // Start drag selection if not doing a specific modifier click already handled by parent
+      const isModifier = e.shiftKey || e.ctrlKey || e.metaKey;
+      if (!isModifier) {
+        selectionRef.current = { startIdx: index, isDragging: true };
+      }
+    };
+
+    const handleMouseEnter = () => {
+      if (selectionRef.current?.isDragging && onRowMouseDown) {
+        // Sweep selection from startIdx to current index
+        // We simulate a Shift+Click on the current item to trigger range selection in the parent
+        const fakeEvent = {
+          button: 0,
+          shiftKey: true,
+          ctrlKey: false,
+          metaKey: false,
+          preventDefault: () => {},
+          stopPropagation: () => {},
+          target: {} 
+        } as unknown as React.MouseEvent;
+
+        onRowMouseDown(item, fakeEvent);
+      }
+    };
 
     return (
       <div 
         style={{ 
           ...style, 
           display: 'flex',
-          background: isSelected ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent',
           borderBottom: '1px solid var(--border-color)',
           cursor: (onRowClick || onRowMouseDown) ? 'pointer' : 'default',
           transition: 'background 0.1s ease',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          userSelect: 'none'
         }}
-        className="table-row-hover"
-        onClick={() => onRowClick?.(item)}
-        onMouseDown={onRowMouseDown ? (e) => onRowMouseDown(item, e) : undefined}
+        className={`table-row-hover ${isSelected ? 'table-row-selected' : ''}`}
+        onClick={() => {
+          // If we weren't just dragging, handle normal click
+          if (!selectionRef.current?.isDragging) {
+            onRowClick?.(item);
+          }
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseEnter={handleMouseEnter}
         onContextMenu={(e) => onRowContextMenu?.(item, e)}
       >
         {orderedColumns.filter(c => visibleColumnIds.has(c.id)).map(col => (
@@ -285,7 +328,7 @@ export function SmartTable<T extends object>({
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         background: 'var(--bg-secondary)', gap: '16px'
       }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+        <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }} >
           <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />
           <input 
             type="text"
@@ -298,13 +341,13 @@ export function SmartTable<T extends object>({
             }}
           />
         </div>
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '4px' }} >
             <button 
                 onClick={() => setIsCompact(!isCompact)}
                 className="title-btn"
                 title={isCompact ? "Switch to comfortable view" : "Switch to compact view"}
                 style={{ 
-                   padding: '8px', borderRadius: '6px', background: isCompact ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent',
+                   padding: ' 8px', borderRadius: '6px', background: isCompact ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent',
                    border: `1px solid ${isCompact ? 'var(--accent-color)' : 'var(--border-color)'}`,
                    color: isCompact ? 'var(--accent-color)' : 'var(--text-secondary)'
                 }}
@@ -316,18 +359,18 @@ export function SmartTable<T extends object>({
                 className="title-btn"
                 title={isSmartWrap ? "Single line view" : "Smart wrap view"}
                 style={{ 
-                   padding: '8px', borderRadius: '6px', background: !isSmartWrap ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent',
+                   padding: ' 8px', borderRadius: '6px', background: !isSmartWrap ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent',
                    border: `1px solid ${!isSmartWrap ? 'var(--accent-color)' : 'var(--border-color)'}`,
                    color: !isSmartWrap ? 'var(--accent-color)' : 'var(--text-secondary)'
                 }}
             >
                 {isSmartWrap ? <AlignLeft size={14} /> : <StretchHorizontal size={14} />}
             </button>
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative' }} >
                 <button 
                     className="title-btn"
                     title="Configure Columns"
-                    style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}
+                    style={{ padding: ' 8px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}
                     onClick={(e) => {
                         const el = e.currentTarget.nextElementSibling as HTMLElement;
                         if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
@@ -418,68 +461,51 @@ export function SmartTable<T extends object>({
               }}
               onClick={() => col.sortable !== false && handleSort(col.id)}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', overflow: 'hidden' }} >
                 {idx === 0 && onSelectAll && (
                   <input 
                     type="checkbox" 
                     checked={allSelected} 
                     onChange={(e) => onSelectAll(e.target.checked)}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ cursor: 'pointer', marginRight: '4px' }}
                   />
                 )}
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.label}</span>
-                {col.sortable !== false && (
-                  <span style={{ 
-                      opacity: activeSort?.columnId === col.id ? 1 : 0.4,
-                      color: activeSort?.columnId === col.id ? 'var(--accent-color)' : 'inherit',
-                      display: 'flex',
-                      flexShrink: 0
-                  }}>
-                    {activeSort?.columnId === col.id ? (
-                      activeSort.direction === 'asc' ? <ChevronUp size={14} strokeWidth={3} /> : <ChevronDown size={14} strokeWidth={3} />
-                    ) : <ArrowUpDown size={12} />}
-                  </span>
-                )}
+                {col.label}
+                {activeSort?.columnId === col.id ? (
+                  activeSort.direction === 'asc' ? <ChevronUp size={14} strokeWidth={3} /> : <ChevronDown size={14} strokeWidth={3} />
+                ) : null}
               </div>
+              {/* Resize handle */}
               <div 
-                onMouseDown={e => {
-                  e.stopPropagation();
-                  startResizing(col.id, e);
-                }}
+                onMouseDown={(e) => startResizing(col.id, e)}
                 onDoubleClick={() => autoResizeColumn(col.id)}
-                style={{ 
-                  position: 'absolute', right: 0, top: 0, bottom: 0, width: '4px', 
-                  cursor: 'col-resize', background: 'transparent', zIndex: 40
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: '4px',
+                  cursor: 'col-resize',
+                  background: 'transparent'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-color)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                title="Drag to resize, double-click to auto-fit"
               />
             </div>
           ))}
         </div>
 
-        {/* Body (Virtualized) */}
-        <div style={{ flex: 1, minHeight: 0 }}>
-          {filteredData.length > 0 ? (
-            <FixedSizeList
-              ref={bodyRef}
-              height={tableHeight - (isCompact ? 32 : 36)} // Approximate header height adjustment
-              itemCount={filteredData.length}
-              itemSize={rowHeight}
-              width="100%"
-              onScroll={onScroll}
-              className="virtualized-list"
-            >
-              {Row}
-            </FixedSizeList>
-          ) : (
-            <div style={{ padding: '60px', textAlign: 'center', opacity: 0.3, color: 'var(--text-tertiary)' }}>
-              {emptyMessage}
-            </div>
-          )}
-        </div>
+        {/* Virtualized List */}
+        <FixedSizeList
+          height={tableHeight}
+          itemCount={stableFilteredData.length}
+          itemSize={rowHeight}
+          width='100%'
+          itemData={stableFilteredData}
+        >
+          {Row}
+        </FixedSizeList>
       </div>
     </div>
   );
 }
+
+export default SmartTable;

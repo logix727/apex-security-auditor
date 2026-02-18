@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { ShieldAlert, Play, Trash2 } from 'lucide-react';
-import { useDebugLogger } from '../DebugConsole';
+import { useDebugLogger } from '../debug/DebugConsole';
+import { useAnalysis } from '../../context/AnalysisContext';
 
 interface InterceptedRequest {
     id: string;
@@ -18,6 +19,7 @@ export const InterceptView: React.FC = () => {
     const [editedHeaders, setEditedHeaders] = useState<string>('');
     const [editedBody, setEditedBody] = useState<string>('');
     const { info, success, error } = useDebugLogger();
+    const { proxyPort } = useAnalysis();
 
     useEffect(() => {
         const unlisten = listen<InterceptedRequest>('proxy-intercept-request', (event) => {
@@ -79,6 +81,9 @@ export const InterceptView: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px' }}>
                 <ShieldAlert size={24} className={interceptEnabled ? 'text-danger' : 'text-muted'} />
                 <h2 style={{ margin: 0 }}>Proxy Interceptor</h2>
+                <div style={{ marginLeft: '10px', fontSize: '12px', opacity: 0.7, background: 'var(--bg-tertiary)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                    Port: {proxyPort}
+                </div>
                 <button 
                     className={`btn ${interceptEnabled ? 'btn-danger' : 'btn-outline'}`}
                     onClick={toggleIntercept}

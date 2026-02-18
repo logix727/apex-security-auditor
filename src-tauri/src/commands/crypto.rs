@@ -1,14 +1,15 @@
 use crate::utils::crypto::CryptoManager;
-use tauri::command;
+use tauri::{command, State};
 
 #[command]
-pub fn encrypt_api_key(key: String) -> Result<String, String> {
-    let crypto = CryptoManager::new();
+pub fn encrypt_api_key(key: String, crypto: State<'_, CryptoManager>) -> Result<String, String> {
     crypto.encrypt(&key)
 }
 
 #[command]
-pub fn decrypt_api_key(encrypted_key: String) -> Result<String, String> {
-    let crypto = CryptoManager::new();
+pub fn decrypt_api_key(
+    encrypted_key: String,
+    crypto: State<'_, CryptoManager>,
+) -> Result<String, String> {
     crypto.decrypt(&encrypted_key)
 }

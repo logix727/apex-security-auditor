@@ -152,12 +152,43 @@ async fn handle_proxy_connection(
     let method = parts[0];
     let mut url = parts[1].to_string();
 
+    if method == "CONNECT" {
+        // Handle HTTPS CONNECT Tunnel
+        stream
+            .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            .await?;
+
+        // Connect to upstream
+        let upstream_host = if url.contains(":") {
+            url.clone()
+        } else {
+            format!("{}:443", url)
+        };
+        match TcpStream::connect(&upstream_host).await {
+            Ok(mut upstream) => {
+                // Bidirectional copy
+                let (mut client_read, mut client_write) = stream.split();
+                let (mut server_read, mut server_write) = upstream.split();
+
+                let client_to_server = tokio::io::copy(&mut client_read, &mut server_write);
+                let server_to_client = tokio::io::copy(&mut server_read, &mut client_write);
+
+                let _ = tokio::join!(client_to_server, server_to_client);
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("Failed to connect to upstream {}: {}", upstream_host, e);
+                return Ok(());
+            }
+        }
+    }
+
     if !url.starts_with("http") && !url.starts_with("/") {
         url = format!("http://{}", url);
     }
 
     if url.starts_with("http") {
-        let _ = db.add_asset(&url, "Proxy", Some(method), false);
+        let _ = db.add_asset(&url, "Proxy", Some(method), false, false, 0);
         let _ = app_handle.emit("assets-updated", ());
     }
 
@@ -171,7 +202,39 @@ async fn handle_proxy_connection(
         }
     }
 
-    let final_body = Vec::new(); // Simplified body handling
+    let mut content_length = 0;
+    for line in &lines {
+        if line.to_lowercase().starts_with("content-length:") {
+            if let Some((_, val)) = line.split_once(':') {
+                content_length = val.trim().parse().unwrap_or(0);
+            }
+        }
+    }
+
+    let mut final_body = Vec::new();
+
+    // Check if we already have body in buffer (after \r\n\r\n)
+    // Find double CRLF
+    let mut body_start_idx = 0;
+    for i in 0..n.saturating_sub(3) {
+        if &buffer[i..i + 4] == b"\r\n\r\n" {
+            body_start_idx = i + 4;
+            break;
+        }
+    }
+
+    if body_start_idx > 0 && body_start_idx < n {
+        final_body.extend_from_slice(&buffer[body_start_idx..n]);
+    }
+
+    // Read remaining body if needed
+    if content_length > final_body.len() {
+        let remaining = content_length - final_body.len();
+        let mut body_buf = vec![0u8; remaining];
+        if let Ok(read_n) = stream.read_exact(&mut body_buf).await {
+            final_body.extend_from_slice(&body_buf[..read_n]);
+        }
+    }
 
     if intercept_enabled.load(Ordering::SeqCst) {
         let (tx, rx) = oneshot::channel();

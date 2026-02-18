@@ -1,8 +1,12 @@
+use crate::db::traits::DatabaseTrait;
 use crate::db::SqliteDatabase;
 use tauri::State;
 
 #[tauri::command]
-pub async fn generate_audit_report(state: State<'_, SqliteDatabase>) -> Result<String, String> {
+pub async fn generate_audit_report(
+    _app: tauri::AppHandle,
+    state: State<'_, SqliteDatabase>,
+) -> Result<String, String> {
     let all_assets = state.get_assets().map_err(|e| e.to_string())?;
 
     // Filter for suspect assets (those with triage_status containing "Suspect" or high risk)
@@ -11,49 +15,51 @@ pub async fn generate_audit_report(state: State<'_, SqliteDatabase>) -> Result<S
         .filter(|a| a.triage_status == "Suspect" || a.risk_score > 50)
         .collect();
 
-    if suspects.is_empty() {
-        return Ok("# No Findings to Report\n\nMark assets as 'Suspect' or run full scans to generate a report.".to_string());
-    }
+    let content = if suspects.is_empty() {
+        "# No Findings to Report\n\nMark assets as 'Suspect' or run full scans to generate a report.".to_string()
+    } else {
+        let mut report = String::from("# APEX API Security Audit Report\n\n");
+        report.push_str(&format!(
+            "*Generated on: {}*\n\n",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
 
-    let mut report = String::from("# APEX API Security Audit Report\n\n");
-    report.push_str(&format!(
-        "*Generated on: {}*\n\n",
-        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
-    ));
+        for asset in suspects {
+            report.push_str(&format!("## 🔍 Asset: {}\n", asset.url));
+            report.push_str(&format!("**Method:** {}\n", asset.method));
+            report.push_str(&format!("**Risk Score:** {}\n", asset.risk_score));
+            report.push_str(&format!("**Triage Status:** {}\n\n", asset.triage_status));
 
-    for asset in suspects {
-        report.push_str(&format!("## 🔍 Asset: {}\n", asset.url));
-        report.push_str(&format!("**Method:** {}\n", asset.method));
-        report.push_str(&format!("**Risk Score:** {}\n", asset.risk_score));
-        report.push_str(&format!("**Triage Status:** {}\n\n", asset.triage_status));
-
-        if !asset.findings.is_empty() {
-            report.push_str("### 🚨 Findings\n");
-            for finding in asset.findings {
-                report.push_str(&format!(
-                    "- **{}**: {}\n",
-                    finding.short, finding.description
-                ));
+            if !asset.findings.is_empty() {
+                report.push_str("### 🚨 Findings\n");
+                for finding in asset.findings {
+                    report.push_str(&format!(
+                        "- **{}**: {}\n",
+                        finding.short, finding.description
+                    ));
+                }
+                report.push_str("\n");
             }
-            report.push_str("\n");
+
+            if !asset.notes.is_empty() {
+                report.push_str("### 📝 Auditor Notes\n");
+                report.push_str(&format!("{}\n\n", asset.notes));
+            }
+
+            report.push_str("### 🔗 Request Details\n");
+            report.push_str("```http\n");
+            report.push_str(&asset.request_headers);
+            report.push_str("\n\n");
+            report.push_str(&asset.request_body);
+            report.push_str("\n```\n\n");
+
+            report.push_str("---\n\n");
         }
+        report
+    };
 
-        if !asset.notes.is_empty() {
-            report.push_str("### 📝 Auditor Notes\n");
-            report.push_str(&format!("{}\n\n", asset.notes));
-        }
-
-        report.push_str("### 🔗 Request Details\n");
-        report.push_str("```http\n");
-        report.push_str(&asset.request_headers);
-        report.push_str("\n\n");
-        report.push_str(&asset.request_body);
-        report.push_str("\n```\n\n");
-
-        report.push_str("---\n\n");
-    }
-
-    Ok(report)
+    // Backend returns string, frontend handles saving via dialog plugin checks
+    Ok(content)
 }
 
 #[tauri::command]
@@ -61,7 +67,11 @@ pub async fn export_findings_to_csv(
     state: State<'_, SqliteDatabase>,
     scope: Option<String>,
 ) -> Result<String, String> {
-    let all_assets = state.get_assets().map_err(|e| e.to_string())?;
+    export_to_csv_impl(&*state, scope)
+}
+
+fn export_to_csv_impl(db: &impl DatabaseTrait, scope: Option<String>) -> Result<String, String> {
+    let all_assets = db.get_assets().map_err(|e| e.to_string())?;
 
     let scope_val = scope.unwrap_or_else(|| "all".to_string());
     let assets_to_export: Vec<_> = match scope_val.as_str() {
@@ -98,6 +108,53 @@ pub async fn export_findings_to_csv(
     }
 
     Ok(csv)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::SqliteDatabase;
+
+    #[test]
+    fn test_export_csv_suspects() {
+        let db = SqliteDatabase::new(":memory:").expect("Failed to create in-memory db");
+
+        // Add some assets
+        db.add_asset("http://safe.com", "test", None, false, false, 0)
+            .unwrap();
+        db.add_asset("http://suspect.com", "test", None, false, false, 0)
+            .unwrap();
+
+        let assets = db.get_assets().unwrap();
+        let suspect_id = assets
+            .iter()
+            .find(|a| a.url == "http://suspect.com")
+            .unwrap()
+            .id;
+
+        // Mark suspect
+        db.update_asset_triage(suspect_id, "Suspect", "Check this")
+            .unwrap();
+
+        // Export suspects
+        let csv = export_to_csv_impl(&db, Some("suspects".to_string())).unwrap();
+
+        // Validation
+        assert!(csv.contains("URL,Method,Status")); // Header
+        assert!(csv.contains("http://suspect.com"));
+        assert!(!csv.contains("http://safe.com"));
+    }
+
+    #[test]
+    fn test_export_csv_all() {
+        let db = SqliteDatabase::new(":memory:").expect("Failed to create in-memory db");
+        db.add_asset("http://example.com", "test", None, false, false, 0)
+            .unwrap();
+
+        let csv = export_to_csv_impl(&db, Some("all".to_string())).unwrap();
+
+        assert!(csv.contains("http://example.com"));
+    }
 }
 
 #[tauri::command]
@@ -137,6 +194,12 @@ pub async fn generate_html_report(state: State<'_, SqliteDatabase>) -> Result<St
         .finding.Medium { border-left-color: #e67e22; }
         code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-family: monospace; }
         pre { background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        @media print {
+            body { max-width: 100%; padding: 0; -webkit-print-color-adjust: exact; }
+            .asset { break-inside: avoid; border: 1px solid #ddd; box-shadow: none; }
+            .header { border-bottom: 2px solid #333; }
+            h1 { color: #000; }
+        }
     </style>
 </head>
 <body>

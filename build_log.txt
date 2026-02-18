@@ -1,0 +1,6 @@
+
+> tauri-appapex-security-auditor@0.1.0 build
+> tsc && vite build
+
+src/components/debug/DebugConsole.tsx(28,7): error TS6133: 'formatTimestamp' is declared but its value is never read.
+src/components/inspector/ResponseDiff.test.tsx(3,30): error TS2307: Cannot find module './ResponseDiff' or its corresponding type declarations.

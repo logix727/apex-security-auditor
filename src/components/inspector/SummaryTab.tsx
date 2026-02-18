@@ -31,39 +31,39 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {inspectorAsset ? (
                     <>
-                        {/* KPI Cards Row */}
+                        {/* KPI Cards Row - Compact Header */}
                         <div style={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', 
-                            gap: '10px' 
+                            display: 'flex', 
+                            gap: '12px',
+                            marginBottom: '10px',
+                            borderBottom: '1px solid var(--border-color)',
+                            paddingBottom: '12px'
                         }}>
-                            <KPICard
-                                label="Risk Score"
-                                value={inspectorAsset.risk_score}
-                                icon={<ShieldAlert size={24} />}
-                                color={inspectorAsset.risk_score > 70 ? 'critical' : inspectorAsset.risk_score > 30 ? 'warning' : 'safe'}
-                            />
-                            <KPICard
-                                label="Critical"
-                                value={inspectorAsset.findings.filter(f => f.severity === 'Critical').length}
-                                icon={<AlertTriangle size={24} />}
-                                color="critical"
-                            />
-                            <KPICard
-                                label="High"
-                                value={inspectorAsset.findings.filter(f => f.severity === 'High').length}
-                                icon={<AlertCircle size={24} />}
-                                color="warning"
-                            />
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: '6px' }}>
+                                <ShieldAlert size={18} style={{ color: inspectorAsset.risk_score > 70 ? 'var(--status-critical)' : inspectorAsset.risk_score > 30 ? 'var(--status-warning)' : 'var(--status-safe)' }} />
+                                <div>
+                                    <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: '700' }}>Risk Score</div>
+                                    <div style={{ fontSize: '16px', fontWeight: '900', lineHeight: 1 }}>{inspectorAsset.risk_score}</div>
+                                </div>
+                            </div>
+                            
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: '6px' }}>
+                                <AlertTriangle size={18} style={{ color: 'var(--status-critical)' }} />
+                                <div>
+                                    <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: '700' }}>Critical</div>
+                                    <div style={{ fontSize: '16px', fontWeight: '900', lineHeight: 1 }}>{inspectorAsset.findings.filter(f => f.severity === 'Critical').length}</div>
+                                </div>
+                            </div>
+
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: '6px' }}>
+                                <AlertCircle size={18} style={{ color: 'var(--status-warning)' }} />
+                                <div>
+                                    <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: '700' }}>High</div>
+                                    <div style={{ fontSize: '16px', fontWeight: '900', lineHeight: 1 }}>{inspectorAsset.findings.filter(f => f.severity === 'High').length}</div>
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Severity Chart */}
-                        <SeverityChart 
-                            findings={inspectorAsset.findings}
-                            type="bar"
-                            size="small"
-                            interactive={true}
-                        />
 
                         {/* AI Asset Summary Section */}
                         <section>

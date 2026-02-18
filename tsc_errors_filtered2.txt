@@ -1,0 +1,4 @@
+src/components/table/SmartTable.tsx(84,9): error TS6133: '_estimatedTotalHeight' is declared but its value is never read.
+src/components/table/SmartTable.tsx(150,9): error TS6133: '_startResizing' is declared but its value is never read.
+src/components/table/SmartTable.tsx(186,9): error TS6133: '_autoResizeColumn' is declared but its value is never read.
+src/hooks/useAssetApi.ts(64,9): error TS6133: '_abortControllers' is declared but its value is never read.

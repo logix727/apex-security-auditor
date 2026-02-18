@@ -1,0 +1,20 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.51s
+     Running unittests src\lib.rs (target\debug\deps\tauri_appapex_security_auditor_lib-e99ed0e5c8514a32.exe)
+
+running 1 test
+Extracted basic URLs: ["https://example.com/api/v1", "http://test.local/foo", "https://test.local/foo"]
+Extracted domain URLs: ["https://api.google", "https://mysite.org/path"]
+
+thread 'commands::assets::tests::test_analyze_content_for_import' (6836) panicked at src\commands\assets.rs:686:9:
+assertion failed: urls_domains.contains(&"https://api.google.com".to_string())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test commands::assets::tests::test_analyze_content_for_import ... FAILED
+
+failures:
+
+failures:
+    commands::assets::tests::test_analyze_content_for_import
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 45 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `--lib`

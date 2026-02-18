@@ -4,6 +4,7 @@
   --bg-sidebar: #060607;
   --border-color: rgba(255, 255, 255, 0.08); /* More subtle borders */
   --accent-color: #6366f1; /* Indigo accent */
+  --accent-rgb: 99, 102, 241; /* For rgba usage */
   --accent-hover: #4f46e5;
   --text-primary: #fafafa;
   --text-secondary: #a1a1aa;
@@ -49,7 +50,9 @@ body {
   width: 100vw;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 .glass-morphism {
@@ -138,6 +141,8 @@ html,
 /* Sidebar */
 .sidebar {
   grid-area: sidebar;
+  width: 240px;
+  flex-shrink: 0;
   background-color: var(--bg-sidebar);
   border-right: 1px solid var(--border-color);
   padding: var(--spacing-md);
@@ -264,8 +269,14 @@ mark {
 }
 
 @keyframes modalEnter {
-  from { transform: scale(0.9) translateY(10px); opacity: 0; }
-  to { transform: scale(1) translateY(0); opacity: 1; }
+  from {
+    transform: scale(0.9) translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
 }
 
 .drop-zone {
@@ -374,13 +385,31 @@ textarea {
 }
 
 .asset-row.selected {
-  background-color: rgba(59, 130, 246, 0.12);
-  border-left: 3px solid var(--accent-color);
+  background-color: rgba(var(--accent-rgb), 0.1) !important;
+  border-left: 3px solid var(--accent-color) !important;
+}
+
+/* SmartTable Row Selection */
+.table-row-selected {
+  background-color: rgba(var(--accent-rgb), 0.12) !important;
+  border-left: 3px solid var(--accent-color) !important;
+  position: relative;
+}
+
+.table-row-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: var(--accent-color);
 }
 
 /* Ensure padding adjustment for border-left on selected rows */
-.asset-row.selected td:first-child {
-  padding-left: 9px;
+.asset-row.selected td:first-child,
+.table-row-selected > div:first-child {
+  padding-left: 13px !important;
 }
 
 /* Status Badges */
@@ -1412,7 +1441,9 @@ mark.json-search-highlight {
   border: none;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: opacity 0.15s ease, color 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
   flex-shrink: 0;
   margin-left: auto;
 }

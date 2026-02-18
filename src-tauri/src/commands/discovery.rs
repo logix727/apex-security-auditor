@@ -1,5 +1,4 @@
-use crate::commands::assets::StagedAsset;
-use crate::db::SqliteDatabase;
+use crate::db::{SqliteDatabase, StagedAsset};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -18,9 +17,15 @@ struct CrtShEntry {
     name_value: String,
 }
 
+use futures::stream::{self, StreamExt};
+
 #[tauri::command]
 pub async fn discover_subdomains(domain: String) -> Result<Vec<DiscoveredAsset>, String> {
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+
     let url = format!("https://crt.sh/?q=%.{}&output=json", domain);
 
     let response = client
@@ -44,57 +49,99 @@ pub async fn discover_subdomains(domain: String) -> Result<Vec<DiscoveredAsset>,
         }
     }
 
-    let mut results: Vec<DiscoveredAsset> = subdomains
+    // Limit to 50 subdomains for performance if the list is huge, or just process them all?
+    // crt.sh can return thousands. Let's process max 100 for now to be safe.
+    let target_urls: Vec<String> = subdomains
         .into_iter()
-        .enumerate()
-        .map(|(i, sub)| {
-            let url = if sub.starts_with("http") {
+        .take(100)
+        .map(|sub| {
+            if sub.starts_with("http") {
                 sub
             } else {
                 format!("https://{}", sub)
-            };
-            DiscoveredAsset {
-                id: format!("disc_{}", i),
-                url,
-                source: "cert".to_string(),
-                risk_estimate: "Info".to_string(), // Default
-                findings: vec!["New Subdomain".to_string()],
             }
         })
         .collect();
 
-    for asset in &mut results {
-        map_cve_to_asset(asset);
-    }
+    let results = stream::iter(target_urls)
+        .map(|url| {
+            let client = &client;
+            async move { probe_asset(client, url).await }
+        })
+        .buffer_unordered(10) // Concurrency limit
+        .collect::<Vec<_>>()
+        .await;
 
-    Ok(results)
+    // Assign IDs based on index
+    let final_assets = results
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut asset)| {
+            asset.id = format!("disc_{}", i);
+            asset
+        })
+        .collect();
+
+    Ok(final_assets)
 }
 
-fn map_cve_to_asset(asset: &mut DiscoveredAsset) {
-    let url_lower = asset.url.to_lowercase();
-    if url_lower.contains("vpn") || url_lower.contains("gateway") {
-        asset.risk_estimate = "High".to_string();
-        asset
-            .findings
-            .push("Potential CWE-287: Improper Authentication".to_string());
-        asset
-            .findings
-            .push("Suggested CVE check: CVE-2023-3519".to_string());
-    } else if url_lower.contains("dev")
-        || url_lower.contains("test")
-        || url_lower.contains("staging")
-    {
-        asset.risk_estimate = "Medium".to_string();
-        asset
-            .findings
-            .push("CWE-200: Information Exposure".to_string());
-    } else if url_lower.contains("jira") || url_lower.contains("confluence") {
-        asset.risk_estimate = "High".to_string();
-        asset.findings.push("Critical App Discovery".to_string());
-        asset.findings.push("CVSS: 9.8 (Critical)".to_string());
-    } else {
-        asset.risk_estimate = "Low".to_string();
-        asset.findings.push("CVSS: 3.3 (Low)".to_string());
+async fn probe_asset(client: &Client, url: String) -> DiscoveredAsset {
+    let static_risk = crate::core::risk::calculate_risk_for_asset(&url, "GET");
+    let mut findings = vec!["New Subdomain".to_string()];
+    let mut risk_level = static_risk.risk_level;
+    let source;
+
+    // Active Probing
+    match client.head(&url).send().await {
+        Ok(resp) => {
+            let status = resp.status();
+            source = format!("cert+probe({})", status.as_u16());
+
+            if status.is_success() {
+                findings.push(format!("Accessible ({})", status));
+                // If completely safe (Info), bump to Low because it's public
+                if risk_level == "Info" {
+                    risk_level = "Low".to_string();
+                }
+
+                // Add interesting headers
+                if let Some(server) = resp.headers().get("server") {
+                    if let Ok(s) = server.to_str() {
+                        findings.push(format!("Server: {}", s));
+                    }
+                }
+            } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                findings.push(format!("Protected ({})", status));
+                // Downgrade risk because it's protected
+                if risk_level == "High" || risk_level == "Critical" {
+                    findings.push(format!("Downgraded from {} (Protected)", risk_level));
+                    risk_level = "Info".to_string();
+                }
+            } else {
+                findings.push(format!("Status: {}", status));
+            }
+        }
+        Err(_) => {
+            // Unreachable
+            source = "cert (unreachable)".to_string();
+            findings.push("Unreachable".to_string());
+            risk_level = "Info".to_string();
+        }
+    }
+
+    // Merge static factors if relevant (and not downgraded)
+    if risk_level != "Info" {
+        for f in static_risk.risk_factors {
+            findings.push(f);
+        }
+    }
+
+    DiscoveredAsset {
+        id: String::new(), // Set later
+        url,
+        source,
+        risk_estimate: risk_level,
+        findings,
     }
 }
 
@@ -104,6 +151,9 @@ pub async fn crawl_discovered_assets(
 ) -> Result<Vec<DiscoveredAsset>, String> {
     let client = Client::new();
     let mut crawled_assets = Vec::new();
+
+    let url_re = regex::Regex::new(r#"https?://[^\s"<>]+"#).map_err(|e| e.to_string())?;
+    let js_path_re = regex::Regex::new(r#""(/[a-zA-Z0-9_/-]+)""#).map_err(|e| e.to_string())?;
 
     for asset in assets {
         let resp = client
@@ -116,8 +166,7 @@ pub async fn crawl_discovered_assets(
             let body = resp.text().await.unwrap_or_default();
 
             // Standard URL method
-            let re = regex::Regex::new(r#"https?://[^\s"<>]+"#).map_err(|e| e.to_string())?;
-            for cap in re.captures_iter(&body) {
+            for cap in url_re.captures_iter(&body) {
                 let found_url = cap[0].to_string();
                 crawled_assets.push(DiscoveredAsset {
                     id: format!("crawl_{}", uuid::Uuid::new_v4()),
@@ -132,8 +181,6 @@ pub async fn crawl_discovered_assets(
             if asset.url.ends_with(".js") {
                 // Look for relative API paths in JS
                 // Simple regex for strings starting with / and containing only url-safe chars
-                let js_path_re =
-                    regex::Regex::new(r#""(/[a-zA-Z0-9_/-]+)""#).map_err(|e| e.to_string())?;
                 for cap in js_path_re.captures_iter(&body) {
                     let path = cap[1].to_string();
                     if path.len() > 1 && !path.contains("//") && !path.contains(" ") {
@@ -166,8 +213,15 @@ pub async fn promote_discovered_assets(
             source: Some("Discovery".to_string()),
         };
         // Reuse existing staged import logic via DB
-        db.add_asset(&staged.url, "Discovery", Some(&staged.method), false)
-            .map_err(|e| format!("DB Error: {}", e))?;
+        db.add_asset(
+            &staged.url,
+            "Discovery",
+            Some(&staged.method),
+            false,
+            false,
+            0,
+        )
+        .map_err(|e| format!("DB Error: {}", e))?;
     }
     Ok(())
 }

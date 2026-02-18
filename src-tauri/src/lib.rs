@@ -1,24 +1,20 @@
 use tauri::Manager;
 
-pub mod ai;
 pub mod core;
-pub mod data;
 pub mod db;
-pub mod detectors;
 pub mod error;
 pub mod ui;
 
 pub mod commands;
-pub mod scanner;
 pub mod services;
 pub mod utils;
 
 use crate::db::SqliteDatabase;
-pub use data::{Badge, Severity};
+pub use core::data::{Badge, Severity};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // Re-exports for convenience within the crate
-pub use detectors::classify_vulnerability;
+pub use core::detectors::classify_vulnerability;
 
 // ============================================
 // SHARED DATA STRUCTURES & UTILS
@@ -27,7 +23,14 @@ pub use detectors::classify_vulnerability;
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct OpenApiSpec {
     pub info: OpenApiInfo,
+    pub servers: Option<Vec<OpenApiServer>>,
     pub paths: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct OpenApiServer {
+    pub url: String,
+    pub description: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -47,15 +50,6 @@ impl OpenApiSpec {
         }
         map
     }
-}
-
-pub async fn scan_url(
-    client: &reqwest::Client,
-    url: &str,
-    method: &str,
-    rate_limiter: &crate::core::rate_limiter::RateLimiter,
-) -> crate::scanner::ScanResult {
-    crate::scanner::scan_url(client, url, method, rate_limiter).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -78,6 +72,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(db)
         .manage(services::proxy::ProxyService::new())
+        .manage(utils::crypto::CryptoManager::new())
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -88,13 +83,12 @@ pub fn run() {
             }));
 
             services::monitor::start_background_monitor(app.handle().clone());
-            ai::auto_initialize_ai(app.handle().clone());
+            core::ai::auto_initialize_ai(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::settings::get_setting,
             commands::settings::set_setting,
-            commands::assets::import_assets,
             commands::assets::get_assets,
             commands::assets::get_asset_history,
             commands::export::generate_audit_report,
@@ -109,25 +103,25 @@ pub fn run() {
             commands::folders::delete_folder,
             commands::scan::get_vulnerability_badge,
             commands::assets::sanitize_database,
-            ai::analyze_logic_flaws,
+            core::ai::analyze_logic_flaws,
             ui::inspector::sign_jwt,
             ui::inspector::decode_jwt,
             ui::inspector::generate_curl,
             commands::assets::update_asset_triage,
-            ai::analyze_finding,
+            commands::assets::update_asset_workbench_status,
+            core::ai::analyze_finding,
             commands::assets::update_asset_source,
-            ai::analyze_asset_summary,
-            ai::get_llm_config,
-            ai::update_llm_config,
-            ai::check_local_model_status,
-            ai::pull_local_model,
+            core::ai::analyze_asset_summary,
+            core::ai::get_llm_config,
+            core::ai::update_llm_config,
+            core::ai::check_local_model_status,
+            core::ai::pull_local_model,
             commands::debug::log_debug,
             commands::shadow_api::import_openapi_spec_and_detect_shadow_apis,
             commands::shadow_api::import_missing_endpoints,
             commands::shadow_api::clear_documentation_status,
             commands::assets::add_asset,
             // Enhanced import commands
-            commands::assets::enhanced_import_assets,
             commands::assets::get_import_status,
             commands::assets::get_import_history,
             commands::assets::reimport_assets,
@@ -140,9 +134,12 @@ pub fn run() {
             commands::sequence::get_sequence,
             commands::sequence::list_sequences,
             commands::sequence::execute_sequence_step,
-            ai::analyze_sequence,
-            ai::generate_exploit_narrative,
-            ai::generate_remediation_diff,
+            commands::sequence::delete_sequence_step,
+            commands::diff::compare_responses,
+            core::ai::analyze_sequence,
+            core::ai::generate_exploit_narrative,
+            core::ai::generate_remediation_diff,
+            core::ai::generate_remediation_guide,
             commands::proxy::start_proxy_service,
             commands::proxy::stop_proxy_service,
             commands::proxy::get_proxy_status,
@@ -150,6 +147,8 @@ pub fn run() {
             commands::proxy::forward_intercepted_request,
             commands::proxy::drop_intercepted_request,
             commands::assets::toggle_finding_fp,
+            commands::active_scan::execute_active_scan,
+            commands::repeater::send_request,
             commands::discovery::discover_subdomains,
             commands::discovery::promote_discovered_assets,
             commands::discovery::fetch_wayback_urls,

@@ -1,7 +1,7 @@
 
 import { createContext, useContext, useState, ReactNode } from 'react';
 import { ActiveView, AssetSidebarView } from '../types';
-import { InspectorTab } from '../components/Inspector';
+import { InspectorTab } from '../components/inspector/Inspector';
 
 interface NavigationContextType {
     activeView: ActiveView;

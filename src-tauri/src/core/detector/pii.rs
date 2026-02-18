@@ -204,6 +204,29 @@ pub fn detect_pii(content: &str) -> Vec<SecretFinding> {
                     {
                         continue;
                     }
+                } else if pattern.name == "General Phone" {
+                    // Reduce false positives for timestamps (e.g. 16xxxxxxxx)
+                    // If it's a 10-digit number starting with 15, 16, or 17, it's likely a timestamp
+                    let digits: String = matched.chars().filter(|c| c.is_ascii_digit()).collect();
+                    if digits.len() == 10
+                        && (digits.starts_with("15")
+                            || digits.starts_with("16")
+                            || digits.starts_with("17"))
+                    {
+                        let context_start = cap.start().saturating_sub(50);
+                        let context_end = (cap.end() + 50).min(content.len());
+                        let context = &content[context_start..context_end].to_lowercase();
+
+                        // Only allow if we see phone-related keywords
+                        if !context.contains("phone")
+                            && !context.contains("tel")
+                            && !context.contains("contact")
+                            && !context.contains("mobile")
+                            && !context.contains("cell")
+                        {
+                            continue;
+                        }
+                    }
                 }
 
                 findings.push(SecretFinding {

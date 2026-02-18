@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import yaml from 'js-yaml';
 import { z } from 'zod';
+import { toast } from 'sonner';
 import { 
   ImportAsset, 
   ImportOptions 
@@ -27,7 +28,7 @@ export const useImportProcessor = (options: ImportOptions, existingUrls: Set<str
       url: data.url,
       method: data.method || 'GET',
       source: fileName,
-      recursive: options.destination === 'asset_manager' ? true : options.recursive,
+      recursive: options.recursive,
     });
 
     if (!result.success) {
@@ -36,14 +37,14 @@ export const useImportProcessor = (options: ImportOptions, existingUrls: Set<str
     }
 
     const validated = result.data;
-    const isDuplicate = existingUrls.has(validated.url);
+    const isDuplicate = existingUrls.has(`${validated.url}|${validated.method}`);
 
     return {
       id: crypto.randomUUID(),
       url: validated.url,
       method: validated.method as any,
       source: validated.source || fileName,
-      selected: !isDuplicate || !options.skipDuplicates,
+      selected: true, // Always select everything by default for review/recurse
       recursive: validated.recursive,
       status: (isDuplicate ? 'duplicate' : 'valid') as any
     };
@@ -167,14 +168,49 @@ export const useImportProcessor = (options: ImportOptions, existingUrls: Set<str
            (rawResults.data as any[]).forEach(processRow);
         }
       } else {
-        const urlRegex = /(?:(GET|POST|PUT|DELETE|PATCH)\s+)?(https?:\/\/[^\s"\'<>]+|(?:(?:\/[^\s"\'<>]+){2,}))/gi;
-        let match;
-        while ((match = urlRegex.exec(content)) !== null) {
-          const method = match[1]?.toUpperCase() || 'GET';
-          const url = match[2];
-          if (url) {
-            const asset = validateAsset({ url, method }, fileName);
-            if (asset) newAssets.push(asset);
+        // Advanced URL & Domain detection (matching backend logic)
+        // 1. Full URLs
+        const urlRe = /https?:\/\/[^\s"'<>()[\]{}|\\^`]+[^\s"'<>()[\]{}|\\^`.,!?;:]/gi;
+        // 2. Domain-like strings (e.g. api.google.com)
+        const domainRe = /\b(?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z]{2,}(?:\/[^\s"'<>()[\]{}|\\^`]*)?/gi;
+        // 3. Methods + URLs
+        const methodUrlRe = /\b(GET|POST|PUT|DELETE|PATCH)\b\s+(https?:\/\/[^\s"'<>()[\]{}|\\^`]+|\/[^\s"'<>()[\]{}|\\^`]*)/gi;
+
+        const foundUrls = new Set<string>();
+
+        // Find Methods + URLs first
+        let m;
+        while ((m = methodUrlRe.exec(content)) !== null) {
+          const method = m[1].toUpperCase();
+          const url = m[2];
+          const asset = validateAsset({ url, method }, fileName);
+          if (asset) {
+            newAssets.push(asset);
+            foundUrls.add(url);
+          }
+        }
+
+        // Find remaining full URLs
+        while ((m = urlRe.exec(content)) !== null) {
+          const url = m[0];
+          if (!foundUrls.has(url)) {
+            const asset = validateAsset({ url }, fileName);
+            if (asset) {
+              newAssets.push(asset);
+              foundUrls.add(url);
+            }
+          }
+        }
+
+        // Find domains (if not already matched)
+        while ((m = domainRe.exec(content)) !== null) {
+          const url = m[0];
+          // Simple heuristic: if it looks like a version number, skip
+          if (/^\d+(\.\d+)+$/.test(url)) continue;
+          
+          if (!foundUrls.has(url) && !foundUrls.has(`https://${url}`) && !foundUrls.has(`http://${url}`)) {
+             const asset = validateAsset({ url }, fileName);
+             if (asset) newAssets.push(asset);
           }
         }
       }
@@ -186,49 +222,92 @@ export const useImportProcessor = (options: ImportOptions, existingUrls: Set<str
     return newAssets;
   }, [validateAsset]);
 
-  const processFiles = useCallback(async (files: FileList | File[]) => {
+  const processFiles = useCallback(async (files: FileList | File[] | string[]) => {
     setIsProcessing(true);
     setErrorMsg(null);
     let allNewAssets: ImportAsset[] = [];
-    const fileArray = Array.isArray(files) ? files : Array.from(files);
+    
+    // Normalize input to array
+    let items: (File | string)[] = [];
+    if (Array.isArray(files)) {
+      items = files;
+    } else {
+      items = Array.from(files);
+    }
 
-    for (const file of fileArray) {
+    // Dynamic import for Tauri fs, only used if we have strings
+    let readTextFile: any = null;
+    let readFile: any = null;
+
+    for (const item of items) {
       try {
-        const validBinaryExtensions = ['.xlsx', '.xls'];
-        const fileName = file.name.toLowerCase();
-        const isKnownBinary = validBinaryExtensions.some(ext => fileName.endsWith(ext));
         let content = '';
+        let fileName = '';
         let type: 'text' | 'csv' | 'json' | 'yaml' = 'text';
+        let isBinary = false;
 
-        if (isKnownBinary) {
-          const buffer = await file.arrayBuffer();
-          const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          content = XLSX.utils.sheet_to_csv(worksheet);
-          type = 'csv';
-        } else {
-          content = await file.text();
-          const isBinary = /[\x00-\x08\x0E-\x1F]/.test(content.substring(0, 1000));
-          if (isBinary && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-            setErrorMsg(`File "${file.name}" appears to be a binary file.`);
-            continue;
-          }
-          if (file.name.endsWith('.json')) type = 'json';
-          else if (file.name.endsWith('.csv')) type = 'csv';
-          else if (file.name.endsWith('.yaml') || file.name.endsWith('.yml')) type = 'yaml';
+        // Handle File Object (Drag & Drop)
+        if (typeof item !== 'string') {
+           fileName = item.name.toLowerCase();
+           if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+               const buffer = await item.arrayBuffer();
+               const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+               const firstSheetName = workbook.SheetNames[0];
+               content = XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName]);
+               type = 'csv';
+           } else {
+               content = await item.text();
+               isBinary = /[\x00-\x08\x0E-\x1F]/.test(content.substring(0, 1000));
+           }
+        } 
+        // Handle File Path (Native Dialog)
+        else {
+           fileName = item.split(/[\\/]/).pop()?.toLowerCase() || 'unknown';
+           
+           // Lazy load Tauri FS
+           if (!readTextFile) {
+               const fs = await import('@tauri-apps/plugin-fs');
+               readTextFile = fs.readTextFile;
+               readFile = fs.readFile;
+           }
+
+           if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+               const bytes = await readFile(item);
+               const workbook = XLSX.read(bytes, { type: 'array' });
+               const firstSheetName = workbook.SheetNames[0];
+               content = XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName]);
+               type = 'csv';
+           } else {
+               content = await readTextFile(item);
+               isBinary = /[\x00-\x08\x0E-\x1F]/.test(content.substring(0, 1000));
+           }
         }
 
-        const assets = await parseContent(content, type, file.name);
+        if (isBinary && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+            setErrorMsg(`File "${fileName}" appears to be binary.`);
+            continue;
+        }
+
+        if (fileName.endsWith('.json')) type = 'json';
+        else if (fileName.endsWith('.csv')) type = 'csv';
+        else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) type = 'yaml';
+        
+        const assets = await parseContent(content, type, fileName);
         allNewAssets = [...allNewAssets, ...assets];
       } catch (err) {
-        setErrorMsg(`Failed to process file ${file.name}: ${err}`);
+        setErrorMsg(`Failed to process file: ${err}`);
       }
     }
 
     setStagedAssets(prev => [...prev, ...allNewAssets]);
     setIsProcessing(false);
-  }, [parseContent]);
+
+    if (allNewAssets.length > 0) {
+        toast.success(`Successfully staged ${allNewAssets.length} assets for review.`);
+    } else if (!errorMsg) {
+        toast.error("No valid URLs or assets found in the selected file(s).");
+    }
+  }, [parseContent, errorMsg]);
 
   return {
     stagedAssets,

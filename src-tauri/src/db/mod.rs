@@ -40,12 +40,17 @@ pub struct ImportAsset {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct ImportOptions {
     pub destination: String,
     pub recursive: bool,
     pub batch_mode: bool,
+    pub batch_size: i32,
     pub rate_limit: i32,
     pub auto_triage: bool,
+    pub skip_duplicates: bool,
+    pub validate_urls: bool,
 }
 
 impl Default for ImportOptions {
@@ -54,13 +59,30 @@ impl Default for ImportOptions {
             destination: "asset_manager".to_string(),
             recursive: false,
             batch_mode: true,
-            rate_limit: 10,
+            batch_size: 5,
+            rate_limit: 100,
             auto_triage: false,
+            skip_duplicates: true,
+            validate_urls: true,
         }
     }
 }
 
-pub use crate::data::{Badge, Severity};
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ImportResult {
+    pub ids: Vec<i64>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StagedAsset {
+    pub url: String,
+    pub method: String,
+    pub recursive: bool,
+    pub source: Option<String>,
+}
+
+pub use crate::core::data::{Badge, Severity};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Folder {
@@ -91,6 +113,8 @@ pub struct Asset {
     pub is_documented: bool,
     pub source: String,
     pub recursive: bool,
+    pub is_workbench: bool,
+    pub depth: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -125,12 +149,12 @@ impl SqliteDatabase {
     pub fn new(path: &str) -> Result<Self> {
         let conn_raw = Connection::open(path)?;
         let conn = Arc::new(Mutex::new(conn_raw));
-        let conn_lock = conn
+        let mut conn_lock = conn
             .lock()
             .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
 
         Self::init_tables(&conn_lock)?;
-        Self::run_migrations(&conn_lock)?;
+        Self::run_migrations(&mut conn_lock)?;
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
@@ -170,7 +194,7 @@ impl SqliteDatabase {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS assets (
                 id INTEGER PRIMARY KEY,
-                url TEXT NOT NULL UNIQUE,
+                url TEXT NOT NULL,
                 method TEXT DEFAULT 'GET',
                 status TEXT DEFAULT 'Pending',
                 status_code INTEGER DEFAULT 0,
@@ -181,13 +205,16 @@ impl SqliteDatabase {
                 response_body TEXT DEFAULT '',
                 request_headers TEXT DEFAULT '',
                 request_body TEXT DEFAULT '',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 notes TEXT DEFAULT '',
                 triage_status TEXT DEFAULT 'Unreviewed',
                 is_documented BOOLEAN NOT NULL DEFAULT 1,
                 source TEXT DEFAULT 'User',
                 recursive BOOLEAN DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                is_workbench BOOLEAN DEFAULT 0,
+                depth INTEGER DEFAULT 0,
+                UNIQUE(url, method)
             )",
             [],
         )?;
@@ -311,7 +338,7 @@ impl SqliteDatabase {
         Ok(())
     }
 
-    fn run_migrations(conn: &Connection) -> Result<()> {
+    fn run_migrations(conn: &mut Connection) -> Result<()> {
         let columns = [
             ("assets", "status_code", "INTEGER DEFAULT 0"),
             (
@@ -330,6 +357,8 @@ impl SqliteDatabase {
             ("assets", "is_documented", "BOOLEAN NOT NULL DEFAULT 1"),
             ("assets", "source", "TEXT DEFAULT 'User'"),
             ("assets", "recursive", "BOOLEAN DEFAULT 0"),
+            ("assets", "is_workbench", "BOOLEAN DEFAULT 0"),
+            ("assets", "depth", "INTEGER DEFAULT 0"),
             ("sequence_steps", "captures", "TEXT DEFAULT '[]'"),
         ];
 
@@ -356,6 +385,101 @@ impl SqliteDatabase {
                 }
             }
         }
+
+        // Migration: Change uniqueness from url to (url, method)
+        let table_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='assets'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_default();
+
+        if table_sql.contains("url TEXT NOT NULL UNIQUE") {
+            println!("Migrating assets table to UNIQUE(url, method)...");
+
+            // Wrap in transaction for atomicity
+            let tx = conn
+                .transaction()
+                .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+            // 1. Rename old table
+            tx.execute("ALTER TABLE assets RENAME TO assets_old", [])
+                .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+            // 2. Create new table
+            tx.execute(
+                "CREATE TABLE assets (
+                    id INTEGER PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    method TEXT DEFAULT 'GET',
+                    status TEXT DEFAULT 'Pending',
+                    status_code INTEGER DEFAULT 0,
+                    risk_score INTEGER DEFAULT 0,
+                    findings TEXT DEFAULT '',
+                    folder_id INTEGER DEFAULT 1,
+                    response_headers TEXT DEFAULT '',
+                    response_body TEXT DEFAULT '',
+                    request_headers TEXT DEFAULT '',
+                    request_body TEXT DEFAULT '',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT DEFAULT '',
+                    triage_status TEXT DEFAULT 'Unreviewed',
+                    is_documented BOOLEAN NOT NULL DEFAULT 1,
+                    source TEXT DEFAULT 'User',
+                    recursive BOOLEAN DEFAULT 0,
+                    is_workbench BOOLEAN DEFAULT 0,
+                    depth INTEGER DEFAULT 0,
+                    UNIQUE(url, method)
+                )",
+                [],
+            )
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+            // 3. Copy data
+            // We explicitly name columns because ALTER TABLE appended columns might not match our desired order
+            tx.execute(
+                "INSERT INTO assets (
+                    id, url, method, status, status_code, risk_score, findings, folder_id, 
+                    response_headers, response_body, request_headers, request_body, 
+                    created_at, updated_at, notes, triage_status, is_documented, source, recursive, is_workbench, depth
+                ) 
+                SELECT 
+                    id, url, method, status, status_code, risk_score, findings, folder_id, 
+                    response_headers, response_body, request_headers, request_body, 
+                    created_at, updated_at, notes, triage_status, is_documented, source, recursive, is_workbench, depth 
+                FROM assets_old",
+                [],
+            )
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+            // 4. Drop old table
+            tx.execute("DROP TABLE assets_old", [])
+                .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+            // 5. Recreate indexes
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_assets_url ON assets(url)",
+                [],
+            )
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_assets_status ON assets(status)",
+                [],
+            )
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+            tx.execute(
+                "CREATE INDEX IF NOT EXISTS idx_assets_folder ON assets(folder_id)",
+                [],
+            )
+            .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+
+            tx.commit()
+                .map_err(|e| crate::error::Error::Internal(e.to_string()))?;
+            println!("Migration successful.");
+        }
+
         Ok(())
     }
 
@@ -393,8 +517,10 @@ impl traits::DatabaseTrait for SqliteDatabase {
         source: &str,
         method: Option<&str>,
         recursive: bool,
+        is_workbench: bool,
+        depth: i32,
     ) -> Result<i64> {
-        SqliteDatabase::add_asset(self, url, source, method, recursive)
+        SqliteDatabase::add_asset(self, url, source, method, recursive, is_workbench, depth)
     }
     fn get_assets(&self) -> Result<Vec<Asset>> {
         SqliteDatabase::get_assets(self)
@@ -433,6 +559,9 @@ impl traits::DatabaseTrait for SqliteDatabase {
     fn get_authorized_domains(&self) -> Result<std::collections::HashSet<String>> {
         SqliteDatabase::get_authorized_domains(self)
     }
+    fn add_authorized_domain(&self, domain: &str) -> Result<()> {
+        SqliteDatabase::add_authorized_domain(self, domain)
+    }
     fn update_asset_triage(&self, id: i64, triage_status: &str, notes: &str) -> Result<()> {
         SqliteDatabase::update_asset_triage(self, id, triage_status, notes)
     }
@@ -466,6 +595,9 @@ impl traits::DatabaseTrait for SqliteDatabase {
     }
     fn update_asset_documentation(&self, id: i64, is_documented: bool) -> Result<()> {
         SqliteDatabase::update_asset_documentation(self, id, is_documented)
+    }
+    fn update_asset_workbench_status(&self, id: i64, is_workbench: bool) -> Result<()> {
+        SqliteDatabase::update_asset_workbench_status(self, id, is_workbench)
     }
     fn batch_mark_shadow_apis(&self, asset_ids: &[i64]) -> Result<usize> {
         SqliteDatabase::batch_mark_shadow_apis(self, asset_ids)
@@ -533,13 +665,13 @@ impl traits::DatabaseTrait for SqliteDatabase {
     fn create_sequence(&self, name: &str, context_summary: Option<String>) -> Result<String> {
         SqliteDatabase::create_sequence(self, name, context_summary)
     }
-    fn add_step_to_sequence(&self, step: &crate::data::SequenceStep) -> Result<()> {
+    fn add_step_to_sequence(&self, step: &crate::core::data::SequenceStep) -> Result<()> {
         SqliteDatabase::add_step_to_sequence(self, step)
     }
-    fn get_sequence(&self, id: &str) -> Result<crate::data::RequestSequence> {
+    fn get_sequence(&self, id: &str) -> Result<crate::core::data::RequestSequence> {
         SqliteDatabase::get_sequence(self, id)
     }
-    fn list_sequences(&self) -> Result<Vec<crate::data::RequestSequence>> {
+    fn list_sequences(&self) -> Result<Vec<crate::core::data::RequestSequence>> {
         SqliteDatabase::list_sequences(self)
     }
 
