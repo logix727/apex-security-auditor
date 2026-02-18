@@ -10,7 +10,7 @@ declare global {
 }
 
 // Try to get afterEach from vitest if available
-const afterEach = globalThis.afterEach || ((cb: () => void) => { 
+const afterEach = (globalThis as any).afterEach || ((cb: () => void) => { 
   if (typeof afterEach !== 'function') return;
 });
 
@@ -20,3 +20,26 @@ if (typeof afterEach === 'function') {
     cleanup();
   });
 }
+
+// Mock Worker for JSDOM
+class WorkerMock {
+  url: string;
+  onmessage: (msg: any) => void = () => {};
+  constructor(stringUrl: string) {
+    this.url = stringUrl;
+  }
+  postMessage(msg: any) {
+    if (msg.type === 'PROCESS_ASSETS') {
+      setTimeout(() => this.onmessage({ 
+        data: { type: 'PROCESS_ASSETS_COMPLETE', data: msg.data } 
+      }), 0);
+    } else {
+      setTimeout(() => this.onmessage({ data: msg }), 0);
+    }
+  }
+  terminate() {}
+  addEventListener() {}
+  removeEventListener() {}
+}
+
+(globalThis as any).Worker = WorkerMock;

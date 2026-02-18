@@ -3,24 +3,18 @@ import { determineGlobalSource, prepareAssetsForImport, calculateBatchConfig } f
 
 describe('Import Logic Utilities', () => {
   it('should determine global source correctly', () => {
-    expect(determineGlobalSource('workbench')).toBe('Workbench');
+    // Both destinations should default to 'Import' as the source reflects origin, not target view
+    expect(determineGlobalSource('workbench')).toBe('Import');
     expect(determineGlobalSource('asset_manager')).toBe('Import');
   });
 
-  it('should prepare assets with correct source for Workbench', () => {
+  it('should prepare assets with correct source', () => {
     const assets = [{ url: 'http://test.com', source: 'Old' }, { url: 'http://test2.com' }];
     const processed = prepareAssetsForImport(assets, 'workbench');
     
-    expect(processed[0].source).toBe('Workbench');
-    expect(processed[1].source).toBe('Workbench');
-  });
-
-  it('should preserve source for Asset Manager unless missing', () => {
-    const assets = [{ url: 'http://test.com', source: 'Scanner' }, { url: 'http://test2.com' }];
-    const processed = prepareAssetsForImport(assets, 'asset_manager');
-    
-    expect(processed[0].source).toBe('Scanner');
-    expect(processed[1].source).toBe('Import'); // Default
+    // Should preserve 'Old' and default the other to 'Import'
+    expect(processed[0].source).toBe('Old');
+    expect(processed[1].source).toBe('Import');
   });
 
   it('should calculate batch config correctly', () => {

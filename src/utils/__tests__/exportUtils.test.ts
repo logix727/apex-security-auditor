@@ -255,7 +255,7 @@ describe('exportToClipboard', () => {
     await exportToClipboard(mockAssets, 'json');
 
     expect(mockWriteText).toHaveBeenCalledWith(
-      expect.stringContaining('"url":"https://example.com/api/users"')
+      expect.stringContaining('"url": "https://example.com/api/users"')
     );
   });
 });

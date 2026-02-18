@@ -60,7 +60,20 @@ export function useAssetFilter(assets: Asset[], activeFolderId: number | null, s
         // Apply indexed search first (fastest)
         if (debouncedSearchTerm) {
             const searchResults = searchIndex.search(debouncedSearchTerm);
-            const matchingIds = new Set(searchResults.map(r => parseInt(r.ref)));
+            let matchingIds = new Set(searchResults.map(r => parseInt(r.ref)));
+            
+            // Fallback for simple substring matching if index doesn't find anything
+            if (matchingIds.size === 0) {
+                const lowerTerm = debouncedSearchTerm.toLowerCase();
+                result.forEach(a => {
+                    if (a.url.toLowerCase().includes(lowerTerm) || 
+                        a.source.toLowerCase().includes(lowerTerm) ||
+                        a.method.toLowerCase().includes(lowerTerm)) {
+                        matchingIds.add(a.id);
+                    }
+                });
+            }
+            
             result = result.filter(a => matchingIds.has(a.id));
         }
         

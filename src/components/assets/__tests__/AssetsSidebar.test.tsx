@@ -1,7 +1,8 @@
+import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { AssetsSidebar } from '../AssetsSidebar';
-import { Folder, TreeNode, AssetSidebarView } from '../../types';
+import { Folder, TreeNode, AssetSidebarView } from '../../../types';
 
 describe('AssetsSidebar', () => {
   const mockFolders: Folder[] = [
@@ -13,14 +14,14 @@ describe('AssetsSidebar', () => {
   const mockProps = {
     folders: mockFolders,
     activeFolderId: 1,
-    setActiveFolderId: jest.fn(),
+    setActiveFolderId: vi.fn(),
     selectedTreePath: null,
-    setSelectedTreePath: jest.fn(),
+    setSelectedTreePath: vi.fn(),
     domainTree: mockDomainTree,
-    view: 'tree' as AssetSidebarView,
-    setView: jest.fn(),
-    onAddFolder: jest.fn(),
-    onMoveToFolder: jest.fn(),
+    view: 'folders' as AssetSidebarView,
+    setView: vi.fn(),
+    onAddFolder: vi.fn(),
+    onMoveToFolder: vi.fn(),
   };
 
   it('renders without crashing', () => {

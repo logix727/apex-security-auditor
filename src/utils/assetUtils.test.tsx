@@ -35,7 +35,6 @@ describe('assetUtils', () => {
             expect(screen.getByText('FAIL')).toBeInTheDocument();
         });
         
-        // Let's refactor slightly to test the returned element
         it('should have correct text for code 200', () => {
             const element = getStatusBadge(200, []);
             render(element);
@@ -55,16 +54,33 @@ describe('assetUtils', () => {
             expect(getDetectionBadges([])).toBeNull();
         });
 
-        it('should render highest severity emoji', () => {
+        it('should render count for categorized badges', () => {
             const findings: Badge[] = [
-                { emoji: 'ℹ️', severity: 'Info', short: 'Info', description: 'desc' },
-                { emoji: '🚨', severity: 'Critical', short: 'Crit', description: 'desc' },
-                { emoji: '⚠️', severity: 'Medium', short: 'Med', description: 'desc' }
-            ];
+                { emoji: 'ℹ️', severity: 'Info', short: 'Info', description: 'desc' }, // Info category
+                { emoji: '🚨', severity: 'Critical', short: 'Secret', description: 'desc' }, // Secret category
+                { emoji: '⚠️', severity: 'Medium', short: 'BOLA', description: 'desc' } // BOLA category
+            ] as any;
             const element = getDetectionBadges(findings);
             render(element!);
-            expect(screen.getByText('🚨')).toBeInTheDocument();
-            expect(screen.getByText('3')).toBeInTheDocument(); // total count badge
+            
+            // Should see 3 badges each with count 1
+            const counts = screen.getAllByText('1');
+            expect(counts).toHaveLength(3);
+        });
+
+        it('should group findings into categories', () => {
+            const findings: Badge[] = [
+                { short: 'password', description: 'desc' },
+                { short: 'key', description: 'desc' },
+                { short: 'jwt', description: 'desc' }
+            ] as any;
+            const element = getDetectionBadges(findings);
+            render(element!);
+            
+            // password and key are Secret category (count 2)
+            // jwt is Auth category (count 1)
+            expect(screen.getByText('2')).toBeInTheDocument();
+            expect(screen.getByText('1')).toBeInTheDocument();
         });
     });
 });

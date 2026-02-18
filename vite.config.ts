@@ -50,6 +50,6 @@ export default defineConfig(async ({ mode }) => ({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    exclude: ['**/node_modules/**', '**/dist/**', '**/tests/e2e/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/tests/e2e/**', '**/e2e/**'],
   },
 }));
