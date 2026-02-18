@@ -73,7 +73,7 @@ For detailed setup instructions, see [INSTALLATION.md](./docs/INSTALLATION.md)
 
 ## 📁 Project Structure
 
-```
+```text
 apex-security-auditor/
 ├── src/                          # React/TypeScript frontend
 │   ├── components/               # React components
@@ -106,18 +106,21 @@ apex-security-auditor/
 ## 🔧 Technologies Stack
 
 ### Frontend
+
 - **React 18** - UI framework
 - **TypeScript** - Type safety
 - **Vite** - Build tool
 - **CSS3** - Styling
 
 ### Backend
+
 - **Rust** - Performance and safety
 - **Tauri** - Desktop application framework
 - **SQLite** - Local database
 - **serde** - Serialization
 
 ### Development Tools
+
 - **HMR (Hot Module Reload)** - Fast development experience
 - **Cargo** - Rust package manager
 - **npm** - Node package manager
@@ -164,6 +167,7 @@ See [Issues](https://github.com/logix727/apex-security-auditor/issues) for repor
 ## 🤝 Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for:
+
 - Code of conduct
 - Development setup
 - Commit message guidelines
@@ -188,15 +192,15 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ## 📞 Support & Contact
 
-- 📧 Email: [your-email@example.com]
-- 💬 GitHub Discussions: [Link to discussions]
-- 🐛 Bug Reports: [GitHub Issues](https://github.com/logix727/apex-security-auditor/issues)
+- 🐛 Bug Reports & Feature Requests: [GitHub Issues](https://github.com/logix727/apex-security-auditor/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/logix727/apex-security-auditor/discussions)
 
 ---
 
 ## 🔄 Latest Updates
 
 **v0.1.0** - Initial release with core features:
+
 - OpenAPI parsing and analysis
 - PII detection engine
 - Security scanning
@@ -205,10 +209,6 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ---
 
-<div align="center">
-
-**[⬆ back to top](#-apex-security-auditor)**
+**[back to top](#apex-security-auditor)**
 
 Made with ❤️ by the Apex Security team
-
-</div>
