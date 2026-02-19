@@ -28,12 +28,12 @@ impl SqliteDatabase {
             "INSERT INTO sequence_steps (sequence_id, asset_id, method, url, status_code, request_body, response_body, request_headers, response_headers, captures)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             (
-                &step.sequence_id, 
-                &step.asset_id, 
-                &step.method, 
-                &step.url, 
-                &step.status_code, 
-                &step.request_body, 
+                &step.sequence_id,
+                &step.asset_id,
+                &step.method,
+                &step.url,
+                &step.status_code,
+                &step.request_body,
                 &step.response_body,
                 &step.request_headers,
                 &step.response_headers,
